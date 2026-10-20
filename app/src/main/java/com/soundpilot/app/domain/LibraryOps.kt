@@ -12,6 +12,32 @@ import com.soundpilot.app.util.PersianText
  */
 object LibraryOps {
 
+    /** نسخه نرمال‌شده‌شده آهنگ برای جست‌وجو/مرتب‌سازی سریع (یک‌بار محاسبه، هزاران بار استفاده) */
+    data class PreparedSong(
+        val song: Song,
+        val nTitle: String,
+        val nArtist: String,
+        val nAlbum: String,
+        val searchText: String,
+    )
+
+    /**
+     * ایندکس جست‌وجو را یک‌بار برای کل کتابخانه می‌سازد؛
+     * این کار نرمال‌سازی regex روی هر کلید تایپ را حذف می‌کند (بهبود چشمگیر سرعت).
+     */
+    fun prepare(songs: List<Song>): List<PreparedSong> = songs.map { s ->
+        val t = PersianText.normalize(s.title)
+        val a = PersianText.normalize(s.artist)
+        val al = PersianText.normalize(s.album)
+        PreparedSong(
+            song = s,
+            nTitle = t,
+            nArtist = a,
+            nAlbum = al,
+            searchText = "$t $a $al",
+        )
+    }
+
     fun filterSongs(songs: List<Song>, rawQuery: String): List<Song> {
         val q = PersianText.normalize(rawQuery)
         if (q.isEmpty()) return songs
@@ -20,6 +46,15 @@ object LibraryOps {
                 PersianText.normalize(s.artist).contains(q) ||
                 PersianText.normalize(s.album).contains(q)
         }
+    }
+
+    /** فیلتر روی ایندکس آماده — بدون هیچ نرمال‌سازی تکراری */
+    fun filterPrepared(prepared: List<PreparedSong>, rawQuery: String): List<Song> {
+        val q = PersianText.normalize(rawQuery)
+        if (q.isEmpty()) return prepared.map { it.song }
+        return prepared
+            .filter { it.searchText.contains(q) }
+            .map { it.song }
     }
 
     fun sortSongs(songs: List<Song>, mode: SortMode): List<Song> = when (mode) {
@@ -40,6 +75,21 @@ object LibraryOps {
         SortMode.RECENT -> songs.sortedByDescending { it.dateAddedSec }
     }
 
+    /** مرتب‌سازی روی نسخه آماده — کلیدهای نرمال‌شده از قبل محاسبه شده‌اند */
+    fun sortPrepared(prepared: List<PreparedSong>, mode: SortMode): List<Song> = when (mode) {
+        SortMode.TITLE -> prepared.sortedWith(
+            compareBy({ it.nTitle }, { it.nArtist }),
+        ).map { it.song }
+        SortMode.ARTIST -> prepared.sortedWith(
+            compareBy({ it.nArtist }, { it.nAlbum }, { it.song.trackNumber }),
+        ).map { it.song }
+        SortMode.ALBUM -> prepared.sortedWith(
+            compareBy({ it.nAlbum }, { it.song.trackNumber }),
+        ).map { it.song }
+        SortMode.DURATION -> prepared.sortedByDescending { it.song.durationMs }.map { it.song }
+        SortMode.RECENT -> prepared.sortedByDescending { it.song.dateAddedSec }.map { it.song }
+    }
+
     fun albums(songs: List<Song>): List<Album> = songs
         .groupBy { it.albumId }
         .map { (_, group) ->
@@ -50,6 +100,7 @@ object LibraryOps {
                 artist = first.artist,
                 songCount = group.size,
                 totalDurationMs = group.sumOf { it.durationMs },
+                firstSongId = first.id,
             )
         }
         .sortedBy { PersianText.normalize(it.name) }

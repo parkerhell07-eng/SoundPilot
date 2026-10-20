@@ -54,7 +54,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.soundpilot.app.data.SettingsRepository
 import com.soundpilot.app.di.ServiceLocator
-import com.soundpilot.app.ui.components.ArtworkFill
+import com.soundpilot.app.ui.components.SongArtworkFill
 import com.soundpilot.app.util.PersianText
 import kotlinx.coroutines.launch
 
@@ -81,14 +81,11 @@ fun PlayerScreen(
     val settings = ServiceLocator.settingsRepository
     val carMode by settings.carMode.collectAsStateWithLifecycle(false)
     val queue by playbackVm.queue.collectAsStateWithLifecycle()
+    val currentSong by playbackVm.currentSong.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
 
     val snackbarHostState = remember { SnackbarHostState() }
     var showQueue by remember { mutableStateOf(false) }
-
-    LaunchedEffect(Unit) {
-        playbackVm.errors.collect { message -> snackbarHostState.showSnackbar(message) }
-    }
 
     Box(
         modifier = Modifier
@@ -165,8 +162,9 @@ fun PlayerScreen(
                 Spacer(Modifier.weight(1f))
             } else {
                 Spacer(Modifier.height(8.dp))
-                ArtworkFill(
-                    uri = metadata?.artworkUri?.toString(),
+                SongArtworkFill(
+                    albumId = currentSong?.albumId ?: 0L,
+                    songId = currentSong?.id ?: 0L,
                     modifier = Modifier
                         .fillMaxWidth(0.86f)
                         .aspectRatio(1f)

@@ -11,10 +11,15 @@ import com.soundpilot.app.domain.model.Artist
 import com.soundpilot.app.domain.model.LibraryTab
 import com.soundpilot.app.domain.model.Song
 import com.soundpilot.app.domain.model.SortMode
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -32,38 +37,74 @@ data class LibraryUiState(
     val empty: Boolean = false,
 )
 
+/** نتیجه محاسبات سنگین کتابخانه که یک‌جا و روی ترد پس‌زمینه انجام می‌شود */
+private data class LibraryComputed(
+    val storeState: LibraryState,
+    val songs: List<Song>,
+    val albums: List<Album>,
+    val artists: List<Artist>,
+)
+
+/**
+ * ViewModel کتابخانه با سه بهینه‌سازی کلیدی برای سرعت:
+ * ۱) ایندکس جست‌وجوی نرمال‌شده که یک‌بار برای کل کتابخانه ساخته می‌شود
+ *    (به‌جای نرمال‌سازی regex همه فیلدها روی هر حرف تایپ).
+ * ۲) فیلتر با debounce روی ورودی جست‌وجو؛ TextField فوری می‌ماند.
+ * ۳) همه محاسبات فیلتر/گروه‌بندی روی Dispatchers.Default — ترد UI هرگز بلاک نمی‌شود.
+ */
+@OptIn(FlowPreview::class)
 class LibraryViewModel : ViewModel() {
 
     private val settings = ServiceLocator.settingsRepository
-    private val queryFlow = MutableStateFlow("")
+    private val queryInputFlow = MutableStateFlow("")
     private val tabFlow = MutableStateFlow(LibraryTab.SONGS)
 
-    val uiState: StateFlow<LibraryUiState> = combine(
+    /** ورودی فوری برای نمایش در TextField */
+    val queryInput: StateFlow<String> = queryInputFlow
+
+    /** محاسبات سنگین: ایندکس + فیلتر debounced + گروه‌بندی — همه روی ترد پس‌زمینه */
+    private val computed: StateFlow<LibraryComputed> = combine(
         LibraryStore.state,
-        queryFlow,
+        queryInputFlow.debounce(180),
+    ) { storeState, query ->
+        val songs = (storeState as? LibraryState.Ready)?.songs ?: emptyList()
+        val index = LibraryOps.prepare(songs)
+        val filtered = LibraryOps.filterPrepared(index, query)
+        LibraryComputed(
+            storeState = storeState,
+            songs = filtered,
+            albums = LibraryOps.albums(filtered),
+            artists = LibraryOps.artists(filtered),
+        )
+    }
+        .flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LibraryComputed(LibraryState.Loading, emptyList(), emptyList(), emptyList()))
+
+    val uiState: StateFlow<LibraryUiState> = combine(
+        computed,
+        queryInputFlow,
         tabFlow,
         settings.sortMode,
         settings.favorites,
-    ) { storeState, query, tab, sort, favorites ->
-        val songs = (storeState as? LibraryState.Ready)?.songs ?: emptyList()
-        val filtered = LibraryOps.sortSongs(LibraryOps.filterSongs(songs, query), sort)
+    ) { data, query, tab, sort, favorites ->
+        val sorted = LibraryOps.sortSongs(data.songs, sort)
         LibraryUiState(
             tab = tab,
             query = query,
             sortMode = sort,
-            songs = filtered,
-            albums = LibraryOps.albums(filtered),
-            artists = LibraryOps.artists(filtered),
+            songs = sorted,
+            albums = data.albums,
+            artists = data.artists,
             favorites = favorites,
-            favoriteSongs = filtered.filter { it.id in favorites },
-            loading = storeState is LibraryState.Loading,
-            error = (storeState as? LibraryState.Error)?.message,
-            empty = storeState is LibraryState.Empty,
+            favoriteSongs = sorted.filter { it.id in favorites },
+            loading = data.storeState is LibraryState.Loading,
+            error = (data.storeState as? LibraryState.Error)?.message,
+            empty = data.storeState is LibraryState.Empty,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LibraryUiState())
 
     fun setQuery(query: String) {
-        queryFlow.value = query
+        queryInputFlow.value = query
     }
 
     fun setTab(tab: LibraryTab) {

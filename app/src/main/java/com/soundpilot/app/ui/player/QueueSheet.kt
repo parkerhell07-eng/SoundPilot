@@ -28,7 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.soundpilot.app.ui.components.Artwork
+import com.soundpilot.app.ui.components.SongArtwork
 import com.soundpilot.app.util.PersianText
 
 /** ورق پایینی صف پخش: پرش به آیتم و حذف آیتم */
@@ -88,7 +88,12 @@ fun QueueSheet(
                                 }
                             }
                             Spacer(Modifier.width(10.dp))
-                            Artwork(uri = entry.artworkUri, size = 42.dp, cornerRadius = 8.dp)
+                            SongArtwork(
+                                albumId = entry.albumId,
+                                songId = entry.mediaId ?: 0L,
+                                size = 42.dp,
+                                cornerRadius = 8.dp,
+                            )
                             Spacer(Modifier.width(12.dp))
                             Column(Modifier.weight(1f)) {
                                 Text(

@@ -29,7 +29,8 @@ import androidx.compose.ui.unit.dp
 fun MiniPlayerBar(
     title: String,
     artist: String,
-    artworkUri: String?,
+    albumId: Long,
+    songId: Long,
     isPlaying: Boolean,
     onTogglePlay: () -> Unit,
     onNext: () -> Unit,
@@ -50,7 +51,7 @@ fun MiniPlayerBar(
                 .padding(horizontal = 10.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Artwork(uri = artworkUri, size = 44.dp, cornerRadius = 10.dp)
+            SongArtwork(albumId = albumId, songId = songId, size = 44.dp, cornerRadius = 10.dp)
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
                 Text(

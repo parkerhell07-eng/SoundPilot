@@ -27,6 +27,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -42,18 +43,74 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import coil.compose.SubcomposeAsyncImage
+import coil.compose.AsyncImage
+import com.soundpilot.app.data.AlbumArtRepository
 import com.soundpilot.app.domain.model.Song
 import com.soundpilot.app.util.PersianText
 
-/** نمایش تصویر آلبوم با جای‌گزینهٔ تمیز در نبود تصویر یا خطای بارگذاری */
+/**
+ * تصویر آلبوم واقعی یک آهنگ/آلبوم بر پایه پایپ‌لاین استاندارد اندروید مدرن
+ * (loadThumbnail/کاور تعبیه‌شده + کش دیسک) و نمایش با AsyncImage سبک.
+ *
+ * نکته کارایی: URI قدیمی «albumart» در اندروید ۱۰+ از کار افتاده است؛
+ * این کامپوننت مستقیماً از کش برنامه استفاده می‌کند و تلاش‌های شبکه‌ای/Provider ناموفق ندارد.
+ */
 @Composable
-fun Artwork(
-    uri: String?,
+fun SongArtwork(
+    albumId: Long,
+    songId: Long,
     size: Dp,
     cornerRadius: Dp = 12.dp,
     modifier: Modifier = Modifier,
     fallbackIcon: ImageVector = Icons.Rounded.MusicNote,
+) {
+    var artUri by remember(albumId) { mutableStateOf(AlbumArtRepository.cachedUri(albumId)) }
+
+    LaunchedEffect(albumId, songId) {
+        if (artUri == null && albumId > 0) {
+            artUri = AlbumArtRepository.uriFor(albumId, songId)
+        }
+    }
+
+    ArtworkBox(
+        uri = artUri,
+        size = size,
+        cornerRadius = cornerRadius,
+        modifier = modifier,
+        fallbackIcon = fallbackIcon,
+    )
+}
+
+/** تصویر بزرگ/آزاد (پلیر و هدر آلبوم) با همان پایپ‌لاین */
+@Composable
+fun SongArtworkFill(
+    albumId: Long,
+    songId: Long,
+    modifier: Modifier = Modifier,
+    fallbackIcon: ImageVector = Icons.Rounded.MusicNote,
+) {
+    var artUri by remember(albumId) { mutableStateOf(AlbumArtRepository.cachedUri(albumId)) }
+
+    LaunchedEffect(albumId, songId) {
+        if (artUri == null && albumId > 0) {
+            artUri = AlbumArtRepository.uriFor(albumId, songId)
+        }
+    }
+
+    ArtworkFillBox(
+        uri = artUri,
+        modifier = modifier,
+        fallbackIcon = fallbackIcon,
+    )
+}
+
+@Composable
+private fun ArtworkBox(
+    uri: String?,
+    size: Dp,
+    cornerRadius: Dp,
+    modifier: Modifier = Modifier,
+    fallbackIcon: ImageVector,
 ) {
     Box(
         modifier = modifier
@@ -70,37 +127,21 @@ fun Artwork(
                 modifier = Modifier.size(size / 3),
             )
         } else {
-            SubcomposeAsyncImage(
+            AsyncImage(
                 model = uri,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.size(size),
-                loading = {
-                    Box(
-                        Modifier
-                            .size(size)
-                            .background(MaterialTheme.colorScheme.surfaceVariant),
-                    )
-                },
-                error = {
-                    Icon(
-                        imageVector = fallbackIcon,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                        modifier = Modifier.size(size / 3),
-                    )
-                },
             )
         }
     }
 }
 
-/** نسخه با اندازه آزاد (برای گرید آلبوم‌ها و تصویر بزرگ پلیر) */
 @Composable
-fun ArtworkFill(
+private fun ArtworkFillBox(
     uri: String?,
     modifier: Modifier = Modifier,
-    fallbackIcon: ImageVector = Icons.Rounded.MusicNote,
+    fallbackIcon: ImageVector,
 ) {
     Box(
         modifier = modifier
@@ -116,26 +157,11 @@ fun ArtworkFill(
                 modifier = Modifier.fillMaxSize(0.3f),
             )
         } else {
-            SubcomposeAsyncImage(
+            AsyncImage(
                 model = uri,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),
-                loading = {
-                    Box(
-                        Modifier
-                            .fillMaxSize()
-                            .background(MaterialTheme.colorScheme.surfaceVariant),
-                    )
-                },
-                error = {
-                    Icon(
-                        imageVector = fallbackIcon,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                        modifier = Modifier.fillMaxSize(0.3f),
-                    )
-                },
             )
         }
     }
@@ -167,7 +193,7 @@ fun SongRow(
             .padding(horizontal = 4.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Artwork(uri = song.albumArtUri, size = 52.dp)
+        SongArtwork(albumId = song.albumId, songId = song.id, size = 52.dp)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text(

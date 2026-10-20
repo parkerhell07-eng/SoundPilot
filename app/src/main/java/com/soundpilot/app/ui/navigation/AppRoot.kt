@@ -7,20 +7,35 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.CloudOff
 import androidx.compose.material.icons.rounded.LibraryMusic
 import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
@@ -75,12 +90,31 @@ fun SoundPilotApp(playbackVm: PlaybackViewModel) {
 
     val isPlaying by playbackVm.isPlaying.collectAsStateWithLifecycle()
     val currentMetadata by playbackVm.currentMetadata.collectAsStateWithLifecycle()
+    val currentSong by playbackVm.currentSong.collectAsStateWithLifecycle()
+    val connectionState by playbackVm.connectionState.collectAsStateWithLifecycle()
     val hasCurrent = currentMetadata != null
+
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    // نمایش سراسری همه خطاهای پخش — هیچ خطایی دیگر بی‌صدا نمی‌ماند
+    LaunchedEffect(Unit) {
+        playbackVm.errors.collect { message -> snackbarHostState.showSnackbar(message) }
+    }
 
     val showChrome = currentRoute in setOf(Routes.LIBRARY, Routes.EQUALIZER, Routes.SETTINGS)
     val showMiniPlayer = showChrome && hasCurrent
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        topBar = {
+            // بنر وضعیت اتصال به موتور پخش — کاربر هرگز «بدون واکنش» نمی‌ماند
+            AnimatedVisibility(visible = showChrome && connectionState != PlaybackViewModel.ConnectionState.READY) {
+                ConnectionBanner(
+                    failed = connectionState == PlaybackViewModel.ConnectionState.FAILED,
+                    onRetry = playbackVm::retryConnection,
+                )
+            }
+        },
         bottomBar = {
             Column {
                 AnimatedVisibility(
@@ -91,7 +125,8 @@ fun SoundPilotApp(playbackVm: PlaybackViewModel) {
                     MiniPlayerBar(
                         title = currentMetadata?.title?.toString() ?: "",
                         artist = currentMetadata?.artist?.toString() ?: "",
-                        artworkUri = currentMetadata?.artworkUri?.toString(),
+                        albumId = currentSong?.albumId ?: 0L,
+                        songId = currentSong?.id ?: 0L,
                         isPlaying = isPlaying,
                         onTogglePlay = playbackVm::togglePlayPause,
                         onNext = playbackVm::next,
@@ -170,6 +205,61 @@ fun SoundPilotApp(playbackVm: PlaybackViewModel) {
                     playbackVm = playbackVm,
                     onBack = { navController.popBackStack() },
                 )
+            }
+        }
+    }
+}
+
+/** بنر اتصال: در حال اتصال (اسپینر) یا اتصال ناموفق (دکمه تلاش مجدد) */
+@Composable
+private fun ConnectionBanner(
+    failed: Boolean,
+    onRetry: () -> Unit,
+) {
+    Surface(
+        color = if (failed) {
+            MaterialTheme.colorScheme.errorContainer
+        } else {
+            MaterialTheme.colorScheme.surfaceContainerHigh
+        },
+        tonalElevation = 2.dp,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+        ) {
+            if (failed) {
+                Icon(
+                    Icons.Rounded.CloudOff,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onErrorContainer,
+                    modifier = Modifier.size(18.dp),
+                )
+            } else {
+                CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+            }
+            Text(
+                text = if (failed) {
+                    "اتصال به سرویس پخش برقرار نشد"
+                } else {
+                    "در حال آماده‌سازی موتور پخش…"
+                },
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.Medium,
+                color = if (failed) {
+                    MaterialTheme.colorScheme.onErrorContainer
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(horizontal = 10.dp),
+            )
+            if (failed) {
+                TextButton(onClick = onRetry) {
+                    Text("تلاش مجدد")
+                }
             }
         }
     }

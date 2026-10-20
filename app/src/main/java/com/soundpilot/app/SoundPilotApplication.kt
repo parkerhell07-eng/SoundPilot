@@ -3,6 +3,7 @@ package com.soundpilot.app
 import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import com.soundpilot.app.data.AlbumArtRepository
 import com.soundpilot.app.di.ServiceLocator
 
 class SoundPilotApplication : Application() {
@@ -10,6 +11,7 @@ class SoundPilotApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         ServiceLocator.init(this)
+        AlbumArtRepository.init(this)
         createNotificationChannel()
     }
 

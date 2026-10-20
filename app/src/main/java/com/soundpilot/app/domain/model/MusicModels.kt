@@ -19,9 +19,6 @@ data class Song(
 ) {
     val contentUri: String
         get() = "content://media/external/audio/media/$id"
-
-    val albumArtUri: String
-        get() = "content://media/external/audio/albumart/$albumId"
 }
 
 data class Album(
@@ -30,6 +27,8 @@ data class Album(
     val artist: String,
     val songCount: Int,
     val totalDurationMs: Long,
+    /** آهنگ شاخص آلبوم برای واکشی کاور از MediaStore */
+    val firstSongId: Long = 0,
 )
 
 data class Artist(

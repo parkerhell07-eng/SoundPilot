@@ -100,4 +100,51 @@ class LibraryOpsTest {
         assertEquals(2, songs.size)
         assertTrue(songs.all { it.artist == "محسن چاوشی" })
     }
+
+    // ---------- ایندکس جست‌وجوی آماده (مسیر جدید نسخه ۱.۱.۰) ----------
+
+    @Test
+    fun `filterPrepared matches filterSongs results`() {
+        val prepared = LibraryOps.prepare(library)
+        assertEquals(
+            LibraryOps.filterSongs(library, "چاوشی").map { it.id },
+            LibraryOps.filterPrepared(prepared, "چاوشی").map { it.id },
+        )
+        assertEquals(
+            LibraryOps.filterSongs(library, "ياس").map { it.id },
+            LibraryOps.filterPrepared(prepared, "ياس").map { it.id },
+        )
+        assertEquals(
+            LibraryOps.filterSongs(library, "DELBAR").map { it.id },
+            LibraryOps.filterPrepared(prepared, "DELBAR").map { it.id },
+        )
+    }
+
+    @Test
+    fun `filterPrepared with empty query returns all songs`() {
+        val prepared = LibraryOps.prepare(library)
+        assertEquals(library.size, LibraryOps.filterPrepared(prepared, "").size)
+        assertEquals(library.size, LibraryOps.filterPrepared(prepared, "   ").size)
+    }
+
+    @Test
+    fun `sortPrepared matches sortSongs ordering`() {
+        val prepared = LibraryOps.prepare(library)
+        assertEquals(
+            LibraryOps.sortSongs(library, SortMode.TITLE).map { it.id },
+            LibraryOps.sortPrepared(prepared, SortMode.TITLE).map { it.id },
+        )
+        assertEquals(
+            LibraryOps.sortSongs(library, SortMode.RECENT).map { it.id },
+            LibraryOps.sortPrepared(prepared, SortMode.RECENT).map { it.id },
+        )
+    }
+
+    @Test
+    fun `albums include representative song id for artwork`() {
+        val albums = LibraryOps.albums(library)
+        val salam = albums.first { it.albumId == 10L }
+        // یکی از آهنگ‌های واقعی آلبوم برای واکشی کاور
+        assertTrue(salam.firstSongId == 1L || salam.firstSongId == 2L)
+    }
 }

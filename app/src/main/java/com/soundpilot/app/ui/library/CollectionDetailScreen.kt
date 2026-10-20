@@ -31,6 +31,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -38,8 +39,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.soundpilot.app.data.LibraryState
 import com.soundpilot.app.data.LibraryStore
 import com.soundpilot.app.domain.LibraryOps
-import com.soundpilot.app.ui.components.Artwork
 import com.soundpilot.app.ui.components.EmptyState
+import com.soundpilot.app.ui.components.SongArtwork
+import com.soundpilot.app.ui.components.SongArtworkFill
 import com.soundpilot.app.ui.components.SongRow
 import com.soundpilot.app.ui.player.PlaybackViewModel
 import kotlin.random.Random
@@ -122,10 +124,12 @@ fun CollectionDetailScreen(
                         .padding(horizontal = 16.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    Artwork(
-                        uri = songs.firstOrNull()?.albumArtUri,
-                        size = 168.dp,
-                        cornerRadius = 20.dp,
+                    SongArtworkFill(
+                        albumId = songs.firstOrNull()?.albumId ?: 0L,
+                        songId = songs.firstOrNull()?.id ?: 0L,
+                        modifier = Modifier
+                            .size(168.dp)
+                            .clip(MaterialTheme.shapes.small),
                     )
                     Spacer(Modifier.height(12.dp))
                     Text(

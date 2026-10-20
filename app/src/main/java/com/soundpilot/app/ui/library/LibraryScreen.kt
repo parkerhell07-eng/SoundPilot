@@ -65,9 +65,8 @@ import com.soundpilot.app.domain.model.Artist
 import com.soundpilot.app.domain.model.LibraryTab
 import com.soundpilot.app.domain.model.Song
 import com.soundpilot.app.domain.model.SortMode
-import com.soundpilot.app.ui.components.Artwork
-import com.soundpilot.app.ui.components.ArtworkFill
 import com.soundpilot.app.ui.components.EmptyState
+import com.soundpilot.app.ui.components.SongArtworkFill
 import com.soundpilot.app.ui.components.SongRow
 import com.soundpilot.app.ui.player.PlaybackViewModel
 import com.soundpilot.app.util.PersianText
@@ -301,8 +300,9 @@ private fun AlbumsGrid(
                         .fillMaxWidth()
                         .clickable { onOpenAlbum(album.albumId) },
                 ) {
-                    ArtworkFill(
-                        uri = "content://media/external/audio/albumart/${album.albumId}",
+                    SongArtworkFill(
+                        albumId = album.albumId,
+                        songId = album.firstSongId,
                         modifier = Modifier
                             .fillMaxWidth()
                             .aspectRatio(1f),

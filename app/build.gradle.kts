@@ -23,8 +23,8 @@ android {
         minSdk = 26
         // الزام Google Play برای اپ‌های جدید از ۳۱ اوت ۲۰۲۶: targetSdk 36
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.1.0"
     }
 
     if (keystoreProperties.isNotEmpty()) {
@@ -40,8 +40,9 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = true
-            isShrinkResources = true
+            // برای دستگاه‌های کم‌حافظه می‌توان R8 را با -PspMinify=false موقتاً خاموش کرد
+            isMinifyEnabled = providers.gradleProperty("spMinify").orElse("true").get().toBoolean()
+            isShrinkResources = providers.gradleProperty("spMinify").orElse("true").get().toBoolean()
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
@@ -104,6 +105,7 @@ dependencies {
     implementation(libs.coil.compose)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.kotlinx.coroutines.guava)
 
     debugImplementation(libs.androidx.compose.ui.tooling)
 
