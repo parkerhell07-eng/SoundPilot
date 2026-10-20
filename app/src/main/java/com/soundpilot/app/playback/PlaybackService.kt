@@ -21,6 +21,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlin.math.abs
 
 /**
  * سرویس پخش پس‌زمینه بر پایه MediaSessionService.
@@ -92,10 +93,26 @@ class PlaybackService : MediaSessionService() {
                     gainsDb = saved.gainsDb,
                     bassStrength = saved.bassStrength,
                     virtualizerStrength = saved.virtualizerStrength,
+                    loudnessGainMb = saved.loudnessGainMb,
                 ),
             )
             if (player.audioSessionId != 0) {
                 effects?.attach(player.audioSessionId)
+            }
+            // تنظیمات پخش به‌صورت زنده از سمت سرویس اعمال می‌شود (skipSilence فقط
+            // روی ExoPlayer قابل تنظیم است، نه MediaController)
+            val settings = ServiceLocator.settingsRepository
+            serviceScope!!.launch {
+                settings.skipSilence.collect { value ->
+                    runCatching { player.skipSilenceEnabled = value }
+                }
+            }
+            serviceScope!!.launch {
+                settings.playbackSpeed.collect { value ->
+                    runCatching {
+                        player.playbackParameters = player.playbackParameters.withSpeed(value)
+                    }
+                }
             }
         }
     }

@@ -2,6 +2,7 @@ package com.soundpilot.app.audio
 
 import android.media.audiofx.BassBoost
 import android.media.audiofx.Equalizer
+import android.media.audiofx.LoudnessEnhancer
 import android.media.audiofx.Virtualizer
 import android.util.Log
 import com.soundpilot.app.data.EqualizerSettings
@@ -30,6 +31,7 @@ class AudioEffectsController(
     private var equalizer: Equalizer? = null
     private var bassBoost: BassBoost? = null
     private var virtualizer: Virtualizer? = null
+    private var loudness: LoudnessEnhancer? = null
     private var currentSessionId: Int = 0
     private var capabilities: EqualizerCapabilities = EqualizerCapabilities.UNSUPPORTED
 
@@ -76,12 +78,20 @@ class AudioEffectsController(
             virtualizer = null
         }
 
+        try {
+            loudness = LoudnessEnhancer(audioSessionId)
+        } catch (e: Exception) {
+            Log.w(TAG, "LoudnessEnhancer در دسترس نیست", e)
+            loudness = null
+        }
+
         capabilities = if (equalizer == null) {
             EqualizerCapabilities.UNSUPPORTED
         } else {
             detected.copy(
                 bassSupported = bassBoost != null,
                 virtualizerSupported = virtualizer != null,
+                loudnessSupported = loudness != null,
             )
         }
         AudioEffectsHub.publish(capabilities, sessionActive = true)
@@ -99,6 +109,7 @@ class AudioEffectsController(
                         gainsDb = state.gainsDb,
                         bassStrength = state.bassStrength,
                         virtualizerStrength = state.virtualizerStrength,
+                        loudnessGainMb = state.loudnessGainMb,
                         bandCount = capabilities.bandCount,
                     ),
                 )
@@ -114,6 +125,7 @@ class AudioEffectsController(
                 gainsDb = emptyList(),
                 bassStrength = saved.bassStrength,
                 virtualizerStrength = saved.virtualizerStrength,
+                loudnessGainMb = saved.loudnessGainMb,
             )
         }
         val gains = if (saved.gainsDb.size == capabilities.bandCount) {
@@ -133,6 +145,7 @@ class AudioEffectsController(
             gainsDb = gains,
             bassStrength = saved.bassStrength,
             virtualizerStrength = saved.virtualizerStrength,
+            loudnessGainMb = saved.loudnessGainMb,
         )
     }
 
@@ -163,9 +176,17 @@ class AudioEffectsController(
             Log.w(TAG, "setStrength برای Virtualizer ناموفق بود", e)
         }
         try {
+            loudness?.setTargetGain(
+                state.loudnessGainMb.coerceIn(0, MAX_LOUDNESS_GAIN_MB),
+            )
+        } catch (e: Exception) {
+            Log.w(TAG, "setTargetGain برای LoudnessEnhancer ناموفق بود", e)
+        }
+        try {
             eq.enabled = state.enabled
             bassBoost?.enabled = state.enabled
             virtualizer?.enabled = state.enabled
+            loudness?.enabled = state.enabled && state.loudnessGainMb > 0
         } catch (e: Exception) {
             Log.w(TAG, "تغییر وضعیت فعال افکت‌ها ناموفق بود", e)
         }
@@ -177,9 +198,11 @@ class AudioEffectsController(
         runCatching { equalizer?.release() }
         runCatching { bassBoost?.release() }
         runCatching { virtualizer?.release() }
+        runCatching { loudness?.release() }
         equalizer = null
         bassBoost = null
         virtualizer = null
+        loudness = null
         currentSessionId = 0
         capabilities = EqualizerCapabilities.UNSUPPORTED
         AudioEffectsHub.publish(EqualizerCapabilities.UNSUPPORTED, sessionActive = false)
@@ -188,5 +211,8 @@ class AudioEffectsController(
     companion object {
         private const val TAG = "AudioEffects"
         private const val EFFECT_PRIORITY = 0
+
+        /** سقف امن تقویت بلندی: ۱۵۰۰ میلی‌بِل = ۱۵ دسی‌بل */
+        const val MAX_LOUDNESS_GAIN_MB = 1500
     }
 }

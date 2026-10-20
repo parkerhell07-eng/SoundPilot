@@ -2,6 +2,7 @@ package com.soundpilot.app.ui.equalizer
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.soundpilot.app.audio.AudioEffectsController
 import com.soundpilot.app.audio.AudioEffectsHub
 import com.soundpilot.app.audio.EqState
 import com.soundpilot.app.audio.EqualizerMath
@@ -29,8 +30,10 @@ data class EqualizerUiState(
     val gainsDb: List<Float> = emptyList(),
     val bassStrength: Int = 0,
     val virtualizerStrength: Int = 0,
+    val loudnessGainMb: Int = 0,
     val bassSupported: Boolean = false,
     val virtualizerSupported: Boolean = false,
+    val loudnessSupported: Boolean = false,
 )
 
 /**
@@ -69,8 +72,10 @@ class EqualizerViewModel : ViewModel() {
             gainsDb = gains,
             bassStrength = desired.bassStrength,
             virtualizerStrength = desired.virtualizerStrength,
+            loudnessGainMb = desired.loudnessGainMb,
             bassSupported = cap.bassSupported,
             virtualizerSupported = cap.virtualizerSupported,
+            loudnessSupported = cap.loudnessSupported,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), EqualizerUiState())
 
@@ -110,6 +115,10 @@ class EqualizerViewModel : ViewModel() {
     fun setVirtualizerStrength(value: Int) =
         publishAndPersist { it.copy(virtualizerStrength = value.coerceIn(0, 1000)) }
 
+    /** بهره بلندی بر حسب میلی‌بِل؛ ۰ تا ۱۵۰۰ (۰ تا ۱۵ دسی‌بل) */
+    fun setLoudnessGainMb(value: Int) =
+        publishAndPersist { it.copy(loudnessGainMb = value.coerceIn(0, AudioEffectsController.MAX_LOUDNESS_GAIN_MB)) }
+
     fun reset() {
         val cap = AudioEffectsHub.capabilities.value
         val gains = if (cap.supported) {
@@ -123,6 +132,7 @@ class EqualizerViewModel : ViewModel() {
                 gainsDb = gains,
                 bassStrength = 0,
                 virtualizerStrength = 0,
+                loudnessGainMb = 0,
             )
         }
     }
@@ -141,6 +151,7 @@ class EqualizerViewModel : ViewModel() {
                     gainsDb = next.gainsDb,
                     bassStrength = next.bassStrength,
                     virtualizerStrength = next.virtualizerStrength,
+                    loudnessGainMb = next.loudnessGainMb,
                     bandCount = if (cap.supported) cap.bandCount else 0,
                 ),
             )

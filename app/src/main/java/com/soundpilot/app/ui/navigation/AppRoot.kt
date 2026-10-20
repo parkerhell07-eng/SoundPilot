@@ -51,6 +51,7 @@ import com.soundpilot.app.ui.library.CollectionDetailScreen
 import com.soundpilot.app.ui.library.LibraryScreen
 import com.soundpilot.app.ui.player.PlaybackViewModel
 import com.soundpilot.app.ui.player.PlayerScreen
+import com.soundpilot.app.ui.settings.PrivacyScreen
 import com.soundpilot.app.ui.settings.SettingsScreen
 
 object Routes {
@@ -60,6 +61,7 @@ object Routes {
     const val PLAYER = "player"
     const val ALBUM = "album"
     const val ARTIST = "artist"
+    const val PRIVACY = "privacy"
 }
 
 private data class BottomDestination(
@@ -174,7 +176,13 @@ fun SoundPilotApp(playbackVm: PlaybackViewModel) {
                 EqualizerScreen()
             }
             composable(Routes.SETTINGS) {
-                SettingsScreen()
+                SettingsScreen(
+                    playbackVm = playbackVm,
+                    onOpenPrivacy = { navController.navigate(Routes.PRIVACY) },
+                )
+            }
+            composable(Routes.PRIVACY) {
+                PrivacyScreen(onBack = { navController.popBackStack() })
             }
             composable(
                 route = Routes.PLAYER,

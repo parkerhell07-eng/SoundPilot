@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- پشتیبانی از انتخاب زبان هر برنامه (اندروید ۱۳+) — fa زبان اصلی، en دومین زبان -->
+<locale-config xmlns:android="http://schemas.android.com/apk/res/android">
+    <locale android:name="fa" />
+    <locale android:name="en" />
+</locale-config>

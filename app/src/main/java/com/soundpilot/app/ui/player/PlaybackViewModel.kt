@@ -3,6 +3,7 @@ package com.soundpilot.app.ui.player
 import android.app.Application
 import android.content.ComponentName
 import android.content.Context
+import android.graphics.Bitmap
 import android.media.AudioDeviceCallback
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
@@ -18,6 +19,7 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
+import androidx.palette.graphics.Palette
 import com.google.common.util.concurrent.ListenableFuture
 import com.soundpilot.app.data.AlbumArtRepository
 import com.soundpilot.app.data.LastPlayed
@@ -25,6 +27,7 @@ import com.soundpilot.app.data.LibraryState
 import com.soundpilot.app.data.LibraryStore
 import com.soundpilot.app.data.SettingsRepository
 import com.soundpilot.app.di.ServiceLocator
+import com.soundpilot.app.domain.SleepTimer
 import com.soundpilot.app.domain.model.Song
 import com.soundpilot.app.playback.PlaybackErrorMapper
 import com.soundpilot.app.playback.PlaybackService
@@ -43,11 +46,13 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.guava.await
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.math.abs
 
 /**
  * مدیریت وضعیت پخش در لایه UI با MediaController و StateFlow.
@@ -70,6 +75,8 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
     private var controllerFuture: ListenableFuture<MediaController>? = null
     private var connectJob: Job? = null
     private var connectAttempts = 0
+
+    private val sleepTimer = SleepTimer(viewModelScope)
 
     private val _controller = MutableStateFlow<MediaController?>(null)
 
@@ -129,6 +136,29 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
     val favorites: StateFlow<Set<Long>> = settings.favorites
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptySet())
 
+    /** پرش خودکار از سکوت‌های طولانی — برای شنیدن پیوسته در خودرو */
+    val skipSilence: StateFlow<Boolean> = settings.skipSilence
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    /** سرعت پخش با حفظ گام صدا */
+    val playbackSpeed: StateFlow<Float> = settings.playbackSpeed
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 1f)
+
+    /** وضعیت تایمر خواب */
+    val sleepTimerState: StateFlow<SleepTimer.State> = sleepTimer.state
+
+    /** رنگ استخراج‌شده از کاور آهنگ جاری — برای پس‌زمینه دینامیک صفحه پخش */
+    val playerPalette: StateFlow<Int?> = currentSong
+        .map { song ->
+            if (song == null) {
+                null
+            } else {
+                extractPaletteColor(AlbumArtRepository.bitmapFor(song.albumId, song.id))
+            }
+        }
+        .flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
     /** درخواست پخش که هنگام اتصال دریافت شده و پس از اتصال اجرا می‌شود */
     private var pendingPlay: Pair<List<Song>, Int>? = null
 
@@ -148,6 +178,11 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
 
         override fun onMediaItemTransition(mediaItem: androidx.media3.common.MediaItem?, reason: Int) {
             scheduleSaveLastPlayed()
+            // تور ایمنی: در حالت «پایان همین آهنگ» اگر گذار به آهنگ بعدی انجام شد، فوراً پاز کن
+            if (sleepTimer.state.value.mode == SleepTimer.Mode.END_OF_TRACK) {
+                _controller.value?.pause()
+                sleepTimer.finishEndOfTrack {}
+            }
         }
 
         override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -166,6 +201,10 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
                 delay(500)
                 _controller.value?.let { c ->
                     if (c.isPlaying) _positionMs.value = c.currentPosition.coerceAtLeast(0)
+                    // حالت «خواب در پایان همین آهنگ»: پیش‌بینی نزدیک‌شدن به پایان و پاز دقیق
+                    if (sleepTimer.state.value.mode == SleepTimer.Mode.END_OF_TRACK) {
+                        maybePauseAtEndOfTrack(c)
+                    }
                 }
             }
         }
@@ -195,6 +234,7 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
                 _connectionState.value = ConnectionState.READY
                 snapshot(controller)
                 restoreIfNeeded(controller)
+                applyTuning(controller)
                 runPendingPlayIfReady()
             } catch (e: Exception) {
                 Log.e(TAG, "اتصال به سرویس پخش ناموفق بود (تلاش ${connectAttempts + 1})", e)
@@ -401,6 +441,85 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
     fun toggleFavorite(songId: Long?) {
         if (songId == null || songId <= 0) return
         viewModelScope.launch { settings.toggleFavorite(songId) }
+    }
+
+    // ---------------- تنظیمات پخش (سرعت/سکوت) ----------------
+
+    /** بازیابی تنظیمات پخش ذخیره‌شده و اعمال روی پلیر پس از اتصال */
+    private suspend fun applyTuning(c: MediaController) {
+        val speed = settings.playbackSpeed.first()
+        runCatching {
+            if (abs(speed - 1f) > 0.01f) {
+                c.playbackParameters = c.playbackParameters.withSpeed(speed)
+            }
+        }.onFailure { Log.w(TAG, "اعمال تنظیمات پخش ناموفق بود", it) }
+    }
+
+    fun setSkipSilence(value: Boolean) {
+        // پرش از سکوت فقط از طریق ExoPlayer سرویس اعمال می‌شود؛
+        // سرویس این تنظیم را به‌صورت زنده collect می‌کند.
+        viewModelScope.launch { settings.setSkipSilence(value) }
+    }
+
+    fun setPlaybackSpeed(value: Float) {
+        val v = value.coerceIn(
+            SettingsRepository.MIN_PLAYBACK_SPEED,
+            SettingsRepository.MAX_PLAYBACK_SPEED,
+        )
+        viewModelScope.launch {
+            settings.setPlaybackSpeed(v)
+            _controller.value?.let { it.playbackParameters = it.playbackParameters.withSpeed(v) }
+        }
+    }
+
+    // ---------------- تایمر خواب ----------------
+
+    fun startSleepTimer(durationMs: Long) {
+        sleepTimer.start(durationMs) {
+            _controller.value?.let { c -> if (c.isPlaying) c.pause() }
+        }
+    }
+
+    fun setSleepAtEndOfTrack() {
+        sleepTimer.markEndOfTrack()
+    }
+
+    fun cancelSleepTimer() {
+        sleepTimer.cancel()
+    }
+
+    /**
+     * حالت «پایان همین آهنگ» — MediaController به setPauseAtEndOfMediaItems دسترسی ندارد،
+     * پس پایان آهنگ را پیش‌بینی می‌کنیم: با نزدیک‌شدن به ۴۰۰ms آخر، پاز می‌کنیم؛
+     * تور ایمنی دوم روی onMediaItemTransition است.
+     */
+    private fun maybePauseAtEndOfTrack(c: MediaController) {
+        if (!c.isPlaying) return
+        val duration = c.duration
+        if (duration <= 0) return
+        val remaining = duration - c.currentPosition
+        if (remaining in 0..400) {
+            c.pause()
+            sleepTimer.finishEndOfTrack {}
+        }
+    }
+
+    private suspend fun extractPaletteColor(bitmap: Bitmap?): Int? {
+        if (bitmap == null) return null
+        return try {
+            val palette = Palette.from(bitmap).maximumColorCount(24).generate()
+            listOfNotNull(
+                palette.darkVibrantSwatch,
+                palette.vibrantSwatch,
+                palette.darkMutedSwatch,
+                palette.mutedSwatch,
+            ).maxByOrNull { it.population }?.rgb
+        } catch (e: Exception) {
+            Log.d(TAG, "استخراج رنگ کاور ناموفق بود", e)
+            null
+        } finally {
+            runCatching { bitmap.recycle() }
+        }
     }
 
     // ---------------- بازیابی و ذخیره وضعیت ----------------

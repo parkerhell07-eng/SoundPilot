@@ -85,6 +85,20 @@ object AlbumArtRepository {
         ioScope.launch { runCatching { uriFor(albumId, songId) } }
     }
 
+    /**
+     * Bitmap کاور برای پردازش (مثل استخراج رنگ پالت) — از کش دیسک خوانده می‌شود.
+     * مسئولیت recycle با فراخواننده است؛ در نبود کاور null برمی‌گرداند.
+     */
+    suspend fun bitmapFor(albumId: Long, songId: Long): Bitmap? {
+        val uri = uriFor(albumId, songId) ?: return null
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                val path = Uri.parse(uri).path ?: return@runCatching null
+                BitmapFactory.decodeFile(path)
+            }.getOrNull()
+        }
+    }
+
     private suspend fun resolveAndCache(albumId: Long, songId: Long): String? =
         diskMutex.withLock {
             memoryCache.get(albumId)?.let { return it }

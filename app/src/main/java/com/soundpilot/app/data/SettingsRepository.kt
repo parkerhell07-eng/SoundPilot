@@ -23,6 +23,7 @@ data class EqualizerSettings(
     val gainsDb: List<Float> = emptyList(),
     val bassStrength: Int = 0,
     val virtualizerStrength: Int = 0,
+    val loudnessGainMb: Int = 0,
     val bandCount: Int = 0,
 )
 
@@ -65,6 +66,8 @@ class SettingsRepository(private val context: Context) {
         val CAR_MODE = booleanPreferencesKey("car_mode")
         val SORT_MODE = stringPreferencesKey("sort_mode")
         val RESTORE_LAST = booleanPreferencesKey("restore_last_played")
+        val SKIP_SILENCE = booleanPreferencesKey("skip_silence")
+        val PLAYBACK_SPEED = stringPreferencesKey("playback_speed")
     }
 
     private inline fun <reified T> decode(raw: String?, default: T): T =
@@ -168,5 +171,40 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setSortMode(mode: SortMode) {
         context.soundPilotDataStore.edit { prefs -> prefs[Keys.SORT_MODE] = mode.id }
+    }
+
+    // ---------- تنظیمات پخش (حالت خودرو/سرعت/سکوت) ----------
+
+    /** حذف خودکار سکوت‌های طولانی بین بخش‌های آهنگ (Media3 skipSilence) */
+    val skipSilence: Flow<Boolean> =
+        context.soundPilotDataStore.data
+            .catch { emit(emptyPreferences()) }
+            .map { it[Keys.SKIP_SILENCE] ?: false }
+
+    suspend fun setSkipSilence(value: Boolean) {
+        context.soundPilotDataStore.edit { prefs -> prefs[Keys.SKIP_SILENCE] = value }
+    }
+
+    /** سرعت پخش با حفظ زیر و بمی صدا (۰٫۵ تا ۲٫۰) */
+    val playbackSpeed: Flow<Float> =
+        context.soundPilotDataStore.data
+            .catch { emit(emptyPreferences()) }
+            .map { raw ->
+                raw[Keys.PLAYBACK_SPEED]?.toFloatOrNull()
+                    ?.coerceIn(MIN_PLAYBACK_SPEED, MAX_PLAYBACK_SPEED)
+                    ?: 1f
+            }
+
+    suspend fun setPlaybackSpeed(value: Float) {
+        context.soundPilotDataStore.edit { prefs ->
+            prefs[Keys.PLAYBACK_SPEED] = value
+                .coerceIn(MIN_PLAYBACK_SPEED, MAX_PLAYBACK_SPEED)
+                .toString()
+        }
+    }
+
+    companion object {
+        const val MIN_PLAYBACK_SPEED = 0.5f
+        const val MAX_PLAYBACK_SPEED = 2f
     }
 }

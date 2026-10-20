@@ -151,6 +151,14 @@ fun EqualizerScreen() {
                     ((ui.virtualizerStrength / 10f).roundToInt()).toString(),
                 ) + "٪",
             )
+            Spacer(Modifier.height(10.dp))
+            EffectSliderRow(
+                title = "تقویت بلندی (Loudness) — مناسب ضبط ماشین",
+                supported = ui.loudnessSupported,
+                value = ui.loudnessGainMb / 1500f,
+                onValueChange = { vm.setLoudnessGainMb((it * 1500).roundToInt()) },
+                valueText = PersianText.formatSignedDb(ui.loudnessGainMb / 100f),
+            )
 
             Spacer(Modifier.height(18.dp))
             OutlinedButton(onClick = vm::reset) {

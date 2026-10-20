@@ -1,6 +1,9 @@
 package com.soundpilot.app.ui.player
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -47,6 +50,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -82,10 +87,23 @@ fun PlayerScreen(
     val carMode by settings.carMode.collectAsStateWithLifecycle(false)
     val queue by playbackVm.queue.collectAsStateWithLifecycle()
     val currentSong by playbackVm.currentSong.collectAsStateWithLifecycle()
+    val paletteColor by playbackVm.playerPalette.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
 
     val snackbarHostState = remember { SnackbarHostState() }
     var showQueue by remember { mutableStateOf(false) }
+
+    // پس‌زمینه دینامیک: رنگ غالب کاور آهنگ جاری با انتقال نرم
+    val paletteSnapshot = paletteColor
+    val topColor by animateColorAsState(
+        targetValue = if (paletteSnapshot != null) {
+            Color(paletteSnapshot).copy(alpha = 0.5f)
+        } else {
+            MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
+        },
+        animationSpec = tween(500),
+        label = "playerTopColor",
+    )
 
     Box(
         modifier = Modifier
@@ -93,11 +111,27 @@ fun PlayerScreen(
             .background(
                 Brush.verticalGradient(
                     colors = listOf(
-                        MaterialTheme.colorScheme.primary.copy(alpha = 0.16f),
+                        topColor,
                         MaterialTheme.colorScheme.background,
                     ),
                 ),
-            ),
+            )
+            // کشیدن افقی روی صفحه پخش = تغییر آهنگ (امکان استفاده بدون نگاه به صفحه)
+            .pointerInput(Unit) {
+                var totalDrag = 0f
+                detectHorizontalDragGestures(
+                    onDragStart = { totalDrag = 0f },
+                    onDragEnd = {
+                        when {
+                            totalDrag < -SWIPE_THRESHOLD_PX -> playbackVm.next()
+                            totalDrag > SWIPE_THRESHOLD_PX -> playbackVm.previous()
+                        }
+                    },
+                ) { change, dragAmount ->
+                    change.consume()
+                    totalDrag += dragAmount
+                }
+            },
     ) {
         Column(
             modifier = Modifier
@@ -490,3 +524,6 @@ private fun repeatLabel(mode: Int): String = when (mode) {
     androidx.media3.common.Player.REPEAT_MODE_ONE -> "تکرار همین آهنگ"
     else -> "بدون تکرار"
 }
+
+/** حداقل جابه‌جایی افقی (پیکسل) برای شمردن یک سوایپ تغییر آهنگ */
+private const val SWIPE_THRESHOLD_PX = 120f

@@ -23,8 +23,8 @@ android {
         minSdk = 26
         // الزام Google Play برای اپ‌های جدید از ۳۱ اوت ۲۰۲۶: targetSdk 36
         targetSdk = 36
-        versionCode = 2
-        versionName = "1.1.0"
+        versionCode = 3
+        versionName = "1.2.0"
     }
 
     if (keystoreProperties.isNotEmpty()) {
@@ -102,6 +102,7 @@ dependencies {
     implementation(libs.androidx.media3.common)
 
     implementation(libs.androidx.datastore.preferences)
+    implementation(libs.androidx.palette.ktx)
     implementation(libs.coil.compose)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.android)
