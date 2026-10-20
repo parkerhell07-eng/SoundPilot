@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">SoundPilot</string>
+    <string name="notification_channel_name">پخش موسیقی</string>
+    <string name="notification_channel_description">نمایش وضعیت پخش و کنترل موسیقی در پس‌زمینه</string>
+</resources>

@@ -1,0 +1,15 @@
+*.iml
+.gradle
+.kotlin
+/local.properties
+/.idea
+.DS_Store
+/build
+app/build
+/captures
+.externalNativeBuild
+.cxx
+# اطلاعات امضا هرگز به مخزن کامیت نشود
+keystore.properties
+*.jks
+*.keystore
