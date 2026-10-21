@@ -14,6 +14,7 @@ import androidx.media3.session.MediaSessionService
 import com.soundpilot.app.MainActivity
 import com.soundpilot.app.audio.AudioEffectsController
 import com.soundpilot.app.audio.AudioEffectsHub
+import com.soundpilot.app.audio.EqState
 import com.soundpilot.app.di.ServiceLocator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -42,7 +43,7 @@ class PlaybackService : MediaSessionService() {
         super.onCreate()
         serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
-        effects = AudioEffectsController(serviceScope!!, ServiceLocator.settingsRepository).also {
+        effects = AudioEffectsController(this, serviceScope!!, ServiceLocator.settingsRepository).also {
             AudioEffectsHub.attachController(it)
         }
 
@@ -72,6 +73,13 @@ class PlaybackService : MediaSessionService() {
             }
         })
 
+        // مسیر اتصال افکت کمکی (طنین) به AudioTrack پلیر
+        effects?.auxEffectSink = { info ->
+            runCatching {
+                if (info == null) player.clearAuxEffectInfo() else player.setAuxEffectInfo(info)
+            }
+        }
+
         val sessionActivity = PendingIntent.getActivity(
             this,
             0,
@@ -83,17 +91,19 @@ class PlaybackService : MediaSessionService() {
             .setSessionActivity(sessionActivity)
             .build()
 
-        // بازیابی وضعیت ذخیره‌شده اکولایزر و اتصال به نشست فعلی (در صورت وجود)
+        // بازیابی وضعیت ذخیره‌شده افکت‌ها و اتصال به نشست فعلی (در صورت وجود)
         serviceScope!!.launch {
             val saved = ServiceLocator.settingsRepository.equalizerSettings.first()
             AudioEffectsHub.setDesiredState(
-                com.soundpilot.app.audio.EqState(
+                EqState(
                     enabled = saved.enabled,
                     profileId = saved.profileId,
                     gainsDb = saved.gainsDb,
                     bassStrength = saved.bassStrength,
                     virtualizerStrength = saved.virtualizerStrength,
                     loudnessGainMb = saved.loudnessGainMb,
+                    reverbId = saved.reverbId,
+                    reverbAmount = saved.reverbAmount,
                 ),
             )
             if (player.audioSessionId != 0) {

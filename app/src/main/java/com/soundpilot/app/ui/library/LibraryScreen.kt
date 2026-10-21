@@ -55,6 +55,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -69,6 +70,7 @@ import com.soundpilot.app.ui.components.EmptyState
 import com.soundpilot.app.ui.components.SongArtworkFill
 import com.soundpilot.app.ui.components.SongRow
 import com.soundpilot.app.ui.player.PlaybackViewModel
+import com.soundpilot.app.ui.theme.SpColors
 import com.soundpilot.app.util.PersianText
 
 @Composable
@@ -81,6 +83,7 @@ fun LibraryScreen(
     val vm: LibraryViewModel = viewModel()
     val ui by vm.uiState.collectAsStateWithLifecycle()
     val currentSongId by playbackVm.currentSongId.collectAsStateWithLifecycle()
+    val isPlaying by playbackVm.isPlaying.collectAsStateWithLifecycle()
 
     var searchActive by remember { mutableStateOf(false) }
     var sortMenuOpen by remember { mutableStateOf(false) }
@@ -90,15 +93,23 @@ fun LibraryScreen(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
+                .padding(horizontal = 16.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(
-                text = "SoundPilot",
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.weight(1f),
-            )
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = "SoundPilot",
+                    style = MaterialTheme.typography.headlineMedium.copy(
+                        brush = Brush.horizontalGradient(listOf(SpColors.Amber, SpColors.Teal)),
+                        fontWeight = FontWeight.Black,
+                    ),
+                )
+                Text(
+                    text = "موزیک همراه جاده",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = SpColors.Amber,
+                )
+            }
             IconButton(onClick = {
                 searchActive = !searchActive
                 if (!searchActive) vm.setQuery("")
@@ -197,6 +208,7 @@ fun LibraryScreen(
                             songs = ui.songs,
                             favorites = ui.favorites,
                             currentSongId = currentSongId,
+                            isPlaying = isPlaying,
                             playbackVm = playbackVm,
                             showNoResults = ui.query.isNotBlank() && ui.songs.isEmpty(),
                         )
@@ -222,6 +234,7 @@ fun LibraryScreen(
                                     songs = ui.favoriteSongs,
                                     favorites = ui.favorites,
                                     currentSongId = currentSongId,
+                                    isPlaying = isPlaying,
                                     playbackVm = playbackVm,
                                     showNoResults = false,
                                 )
@@ -239,6 +252,7 @@ private fun SongsList(
     songs: List<Song>,
     favorites: Set<Long>,
     currentSongId: Long?,
+    isPlaying: Boolean,
     playbackVm: PlaybackViewModel,
     showNoResults: Boolean,
 ) {
@@ -259,6 +273,7 @@ private fun SongsList(
                 song = song,
                 isFavorite = song.id in favorites,
                 isCurrent = song.id == currentSongId,
+                isPlaying = isPlaying,
                 onClick = { playbackVm.play(songs, index) },
                 onToggleFavorite = { playbackVm.toggleFavorite(song.id) },
                 onPlayNext = { playbackVm.playNext(song) },

@@ -1,6 +1,6 @@
 package com.soundpilot.app.audio
 
-/** قابلیت‌های واقعی اکولایزر دستگاه — در زمان اتصال به نشست صوتی تشخیص داده می‌شود */
+/** قابلیت‌های واقعی افکت‌های صوتی دستگاه — در زمان اتصال به نشست صوتی تشخیص داده می‌شود */
 data class EqualizerCapabilities(
     val supported: Boolean = false,
     val bandCount: Int = 0,
@@ -10,6 +10,7 @@ data class EqualizerCapabilities(
     val bassSupported: Boolean = false,
     val virtualizerSupported: Boolean = false,
     val loudnessSupported: Boolean = false,
+    val reverbSupported: Boolean = false,
 ) {
     companion object {
         val UNSUPPORTED: EqualizerCapabilities = EqualizerCapabilities()
@@ -25,7 +26,13 @@ data class EqState(
     val virtualizerStrength: Int = 0,
     /** بهره تقویت بلندی بر حسب میلی‌بِل (۰ تا ۱۵۰۰ = تا +۱۵ دسی‌بل) */
     val loudnessGainMb: Int = 0,
-)
+    /** preset طنین سخت‌افزاری — شناسه ReverbPreset */
+    val reverbId: Int = 0,
+    /** میزان ارسال صدا به طنین (۰ تا ۱۰۰ درصد) */
+    val reverbAmount: Int = 0,
+) {
+    val reverb: ReverbPreset get() = ReverbPreset.fromId(reverbId)
+}
 
 /**
  * پروفایل‌های صوتی به‌صورت منحنی (فرکانس → دسی‌بل) تعریف می‌شوند تا با هر تعداد باند

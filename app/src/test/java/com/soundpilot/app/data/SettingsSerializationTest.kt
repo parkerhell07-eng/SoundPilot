@@ -48,6 +48,25 @@ class SettingsSerializationTest {
     }
 
     @Test
+    fun `v1_2 saved eq json without reverb fields decodes with safe defaults`() {
+        // JSON واقعی ذخیره‌شده توسط نسخه ۱.۲ — نباید هنگام ارتقا خطا بدهد
+        val legacy = """{"enabled":true,"profileId":"car","gainsDb":[4.5,3.0,0.5,0.0,1.5],
+            "bassStrength":400,"virtualizerStrength":150,"loudnessGainMb":300,"bandCount":5}"""
+        val restored = json.decodeFromString<EqualizerSettings>(legacy)
+        assertTrue(restored.enabled)
+        assertEquals("car", restored.profileId)
+        assertEquals(0, restored.reverbId)
+        assertEquals(0, restored.reverbAmount)
+    }
+
+    @Test
+    fun `reverb fields round trip`() {
+        val original = EqualizerSettings(enabled = true, profileId = "spatial3d", reverbId = 5, reverbAmount = 35)
+        val restored = json.decodeFromString<EqualizerSettings>(json.encodeToString(original))
+        assertEquals(original, restored)
+    }
+
+    @Test
     fun `last played round trip`() {
         val original = LastPlayed(
             songIds = listOf(11, 22, 33),

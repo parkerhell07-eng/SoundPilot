@@ -19,6 +19,10 @@ object AudioEffectsHub {
     private val _desiredState = MutableStateFlow(EqState())
     val desiredState: StateFlow<EqState> = _desiredState.asStateFlow()
 
+    /** رده خروجی صوتی فعلی (بلندگو/هدفون/بلوتوث/…) — توسط کنترل‌کننده منتشر می‌شود */
+    private val _deviceCategory = MutableStateFlow(AudioDeviceCategory.SPEAKER)
+    val deviceCategory: StateFlow<AudioDeviceCategory> = _deviceCategory.asStateFlow()
+
     @Volatile
     private var controller: AudioEffectsController? = null
 
@@ -31,6 +35,11 @@ object AudioEffectsHub {
     fun publish(capabilities: EqualizerCapabilities, sessionActive: Boolean) {
         _capabilities.value = capabilities
         _sessionActive.value = sessionActive
+    }
+
+    /** فقط توسط AudioEffectsController فراخوانی می‌شود */
+    fun publishDeviceCategory(category: AudioDeviceCategory) {
+        _deviceCategory.value = category
     }
 
     /**

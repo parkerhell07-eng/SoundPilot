@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.soundpilot.app.data.AlbumArtRepository
 import com.soundpilot.app.domain.model.Song
+import com.soundpilot.app.ui.theme.SpColors
 import com.soundpilot.app.util.PersianText
 
 /**
@@ -173,6 +174,7 @@ fun SongRow(
     song: Song,
     isFavorite: Boolean,
     isCurrent: Boolean,
+    isPlaying: Boolean = false,
     onClick: () -> Unit,
     onToggleFavorite: () -> Unit,
     onPlayNext: () -> Unit,
@@ -181,10 +183,10 @@ fun SongRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(14.dp))
             .background(
                 if (isCurrent) {
-                    MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                    SpColors.Amber.copy(alpha = 0.10f)
                 } else {
                     Color.Transparent
                 },
@@ -193,14 +195,14 @@ fun SongRow(
             .padding(horizontal = 4.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        SongArtwork(albumId = song.albumId, songId = song.id, size = 52.dp)
+        SongArtwork(albumId = song.albumId, songId = song.id, size = 52.dp, cornerRadius = 12.dp)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text(
                 text = song.title,
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
-                color = if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                color = if (isCurrent) SpColors.Amber else MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -213,11 +215,19 @@ fun SongRow(
             )
         }
         Spacer(Modifier.width(8.dp))
-        Text(
-            text = PersianText.formatDuration(song.durationMs),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        if (isCurrent) {
+            PlayingBarsIndicator(
+                isPlaying = isPlaying,
+                barMaxHeight = 16.dp,
+                modifier = Modifier.padding(horizontal = 4.dp),
+            )
+        } else {
+            Text(
+                text = PersianText.formatDuration(song.durationMs),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
         IconButton(onClick = onToggleFavorite) {
             Icon(
                 imageVector = if (isFavorite) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,

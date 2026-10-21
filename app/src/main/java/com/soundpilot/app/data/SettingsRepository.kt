@@ -25,6 +25,9 @@ data class EqualizerSettings(
     val virtualizerStrength: Int = 0,
     val loudnessGainMb: Int = 0,
     val bandCount: Int = 0,
+    // فیلدهای جدید نسخه ۱.۳ — مقادیر پیش‌فرض تضمین سازگاری با JSON قدیمی
+    val reverbId: Int = 0,
+    val reverbAmount: Int = 0,
 )
 
 @Serializable
@@ -68,6 +71,8 @@ class SettingsRepository(private val context: Context) {
         val RESTORE_LAST = booleanPreferencesKey("restore_last_played")
         val SKIP_SILENCE = booleanPreferencesKey("skip_silence")
         val PLAYBACK_SPEED = stringPreferencesKey("playback_speed")
+        val EQ_AUTO_SWITCH = booleanPreferencesKey("eq_auto_switch")
+        val EQ_DEVICE_PROFILES = stringPreferencesKey("eq_device_profiles")
     }
 
     private inline fun <reified T> decode(raw: String?, default: T): T =
@@ -88,6 +93,34 @@ class SettingsRepository(private val context: Context) {
     suspend fun saveEqualizer(settings: EqualizerSettings) {
         context.soundPilotDataStore.edit { prefs ->
             prefs[Keys.EQ] = json.encodeToString(settings)
+        }
+    }
+
+    // ---------- پروفایل صوتی به تفکیک خروجی ----------
+
+    /**
+     * تعویض خودکار پریست صوتی با تغییر خروجی (بلندگو/هدفون/بلوتوث).
+     * پیش‌فرض روشن است: قلب قابلیت «حافظه خروجی» است.
+     */
+    val eqAutoSwitch: Flow<Boolean> =
+        context.soundPilotDataStore.data
+            .catch { emit(emptyPreferences()) }
+            .map { it[Keys.EQ_AUTO_SWITCH] ?: true }
+
+    suspend fun setEqAutoSwitch(value: Boolean) {
+        context.soundPilotDataStore.edit { prefs -> prefs[Keys.EQ_AUTO_SWITCH] = value }
+    }
+
+    /** نقشه رده خروجی → شناسه پریست (مثلاً bluetooth → car-standard) */
+    val deviceProfiles: Flow<Map<String, String>> =
+        context.soundPilotDataStore.data
+            .catch { emit(emptyPreferences()) }
+            .map { decode(it[Keys.EQ_DEVICE_PROFILES], emptyMap<String, String>()) }
+
+    suspend fun saveDeviceProfile(categoryId: String, presetId: String) {
+        context.soundPilotDataStore.edit { prefs ->
+            val current = decode(prefs[Keys.EQ_DEVICE_PROFILES], emptyMap<String, String>())
+            prefs[Keys.EQ_DEVICE_PROFILES] = json.encodeToString(current + (categoryId to presetId))
         }
     }
 

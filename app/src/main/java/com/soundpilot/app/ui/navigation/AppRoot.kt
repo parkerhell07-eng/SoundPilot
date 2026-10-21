@@ -46,13 +46,14 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.soundpilot.app.ui.components.MiniPlayerBar
-import com.soundpilot.app.ui.equalizer.EqualizerScreen
+import com.soundpilot.app.ui.equalizer.EffectStudioScreen
 import com.soundpilot.app.ui.library.CollectionDetailScreen
 import com.soundpilot.app.ui.library.LibraryScreen
 import com.soundpilot.app.ui.player.PlaybackViewModel
 import com.soundpilot.app.ui.player.PlayerScreen
 import com.soundpilot.app.ui.settings.PrivacyScreen
 import com.soundpilot.app.ui.settings.SettingsScreen
+import com.soundpilot.app.ui.theme.SpColors
 
 object Routes {
     const val LIBRARY = "library"
@@ -72,7 +73,7 @@ private data class BottomDestination(
 
 private val bottomDestinations = listOf(
     BottomDestination(Routes.LIBRARY, "کتابخانه", Icons.Rounded.LibraryMusic),
-    BottomDestination(Routes.EQUALIZER, "اکولایزر", Icons.Rounded.GraphicEq),
+    BottomDestination(Routes.EQUALIZER, "استودیو", Icons.Rounded.GraphicEq),
     BottomDestination(Routes.SETTINGS, "تنظیمات", Icons.Rounded.Settings),
 )
 
@@ -94,6 +95,9 @@ fun SoundPilotApp(playbackVm: PlaybackViewModel) {
     val currentMetadata by playbackVm.currentMetadata.collectAsStateWithLifecycle()
     val currentSong by playbackVm.currentSong.collectAsStateWithLifecycle()
     val connectionState by playbackVm.connectionState.collectAsStateWithLifecycle()
+    val positionMs by playbackVm.positionMs.collectAsStateWithLifecycle()
+    val durationMs by playbackVm.durationMs.collectAsStateWithLifecycle()
+    val progress = if (durationMs > 0) positionMs.toFloat() / durationMs else 0f
     val hasCurrent = currentMetadata != null
 
     val snackbarHostState = remember { SnackbarHostState() }
@@ -130,13 +134,16 @@ fun SoundPilotApp(playbackVm: PlaybackViewModel) {
                         albumId = currentSong?.albumId ?: 0L,
                         songId = currentSong?.id ?: 0L,
                         isPlaying = isPlaying,
+                        progress = progress,
                         onTogglePlay = playbackVm::togglePlayPause,
                         onNext = playbackVm::next,
                         onOpen = { navController.navigate(Routes.PLAYER) },
                     )
                 }
                 AnimatedVisibility(visible = showChrome) {
-                    NavigationBar {
+                    NavigationBar(
+                        containerColor = MaterialTheme.colorScheme.surface,
+                    ) {
                         bottomDestinations.forEach { destination ->
                             NavigationBarItem(
                                 selected = currentRoute == destination.route,
@@ -148,6 +155,11 @@ fun SoundPilotApp(playbackVm: PlaybackViewModel) {
                                     )
                                 },
                                 label = { Text(destination.label) },
+                                colors = androidx.compose.material3.NavigationBarItemDefaults.colors(
+                                    selectedIconColor = SpColors.Amber,
+                                    selectedTextColor = SpColors.Amber,
+                                    indicatorColor = SpColors.Amber.copy(alpha = 0.14f),
+                                ),
                             )
                         }
                     }
@@ -173,7 +185,7 @@ fun SoundPilotApp(playbackVm: PlaybackViewModel) {
                 )
             }
             composable(Routes.EQUALIZER) {
-                EqualizerScreen()
+                EffectStudioScreen()
             }
             composable(Routes.SETTINGS) {
                 SettingsScreen(

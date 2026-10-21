@@ -59,6 +59,7 @@ fun CollectionDetailScreen(
     val storeState by LibraryStore.state.collectAsStateWithLifecycle()
     val favorites by playbackVm.favorites.collectAsStateWithLifecycle()
     val currentSongId by playbackVm.currentSongId.collectAsStateWithLifecycle()
+    val isPlaying by playbackVm.isPlaying.collectAsStateWithLifecycle()
 
     val songs = remember(storeState, albumId, artistName) {
         val all = (storeState as? LibraryState.Ready)?.songs ?: emptyList()
@@ -172,6 +173,7 @@ fun CollectionDetailScreen(
                             song = song,
                             isFavorite = song.id in favorites,
                             isCurrent = song.id == currentSongId,
+                            isPlaying = isPlaying,
                             onClick = { playbackVm.play(songs, index) },
                             onToggleFavorite = { playbackVm.toggleFavorite(song.id) },
                             onPlayNext = { playbackVm.playNext(song) },
