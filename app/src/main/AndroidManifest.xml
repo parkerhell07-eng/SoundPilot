@@ -12,6 +12,19 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <!-- برای افکت‌های صوتی (Equalizer / BassBoost) -->
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <!-- تنها کاربرد شبکه در کل برنامه: بروزرسانی درون‌برنامه‌ای از GitHub
+         (بررسی نسخه + دانلود APK — فقط با فرمان کاربر یا بررسی خودکارِ قابل خاموش‌کردن) -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- برای نصب APK نسخه جدید پس از دانلود — همیشه با تأیید صریح کاربر -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
+    <!-- نصاب‌هایی که می‌توانند APK بروزرسانی را باز کنند (پدیداری بسته در API 30+) -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:mimeType="application/vnd.android.package-archive" />
+        </intent>
+    </queries>
 
     <application
         android:name=".SoundPilotApplication"
@@ -53,5 +66,16 @@
                 <action android:name="android.intent.action.MEDIA_BUTTON" />
             </intent-filter>
         </receiver>
+
+        <!-- اشتراک ایمن فایل APK دانلودشده با نصاب سیستم -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
     </application>
 </manifest>

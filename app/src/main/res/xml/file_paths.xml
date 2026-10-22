@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- مسیرهای مجاز برای اشتراک فایل APK بروزرسانی با نصاب سیستم -->
+<paths>
+    <external-files-path
+        name="updates_external"
+        path="updates/" />
+    <cache-path
+        name="updates_cache"
+        path="updates/" />
+</paths>

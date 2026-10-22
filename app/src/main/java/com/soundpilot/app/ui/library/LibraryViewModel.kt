@@ -6,6 +6,7 @@ import com.soundpilot.app.data.LibraryState
 import com.soundpilot.app.data.LibraryStore
 import com.soundpilot.app.di.ServiceLocator
 import com.soundpilot.app.domain.LibraryOps
+import com.soundpilot.app.domain.PlayStatsOps
 import com.soundpilot.app.domain.model.Album
 import com.soundpilot.app.domain.model.Artist
 import com.soundpilot.app.domain.model.LibraryTab
@@ -32,6 +33,7 @@ data class LibraryUiState(
     val artists: List<Artist> = emptyList(),
     val favorites: Set<Long> = emptySet(),
     val favoriteSongs: List<Song> = emptyList(),
+    val recentSongs: List<Song> = emptyList(),
     val loading: Boolean = true,
     val error: String? = null,
     val empty: Boolean = false,
@@ -80,7 +82,20 @@ class LibraryViewModel : ViewModel() {
         .flowOn(Dispatchers.Default)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LibraryComputed(LibraryState.Loading, emptyList(), emptyList(), emptyList()))
 
-    val uiState: StateFlow<LibraryUiState> = combine(
+    /** پخش‌های اخیر — بر اساس آمار واقعی پخش، مرتب بر اساس تازگی */
+    private val recentSongs: StateFlow<List<Song>> = combine(
+        settings.playStats,
+        LibraryStore.state,
+    ) { stats, store ->
+        val songs = (store as? LibraryState.Ready)?.songs ?: emptyList()
+        val byId = HashMap<Long, Song>(songs.size)
+        songs.forEach { byId[it.id] = it }
+        PlayStatsOps.recentSongIds(stats, RECENT_LIMIT).mapNotNull { byId[it] }
+    }
+        .flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    private val baseState: StateFlow<LibraryUiState> = combine(
         computed,
         queryInputFlow,
         tabFlow,
@@ -103,6 +118,13 @@ class LibraryViewModel : ViewModel() {
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LibraryUiState())
 
+    val uiState: StateFlow<LibraryUiState> = combine(
+        baseState,
+        recentSongs,
+    ) { ui, recent ->
+        ui.copy(recentSongs = if (ui.tab == LibraryTab.SONGS) recent else emptyList())
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LibraryUiState())
+
     fun setQuery(query: String) {
         queryInputFlow.value = query
     }
@@ -117,5 +139,9 @@ class LibraryViewModel : ViewModel() {
 
     fun refresh() {
         viewModelScope.launch { LibraryStore.refresh() }
+    }
+
+    private companion object {
+        const val RECENT_LIMIT = 12
     }
 }

@@ -16,6 +16,7 @@ import androidx.compose.material.icons.rounded.CloudOff
 import androidx.compose.material.icons.rounded.LibraryMusic
 import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.SystemUpdateAlt
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
@@ -54,6 +55,8 @@ import com.soundpilot.app.ui.player.PlayerScreen
 import com.soundpilot.app.ui.settings.PrivacyScreen
 import com.soundpilot.app.ui.settings.SettingsScreen
 import com.soundpilot.app.ui.theme.SpColors
+import com.soundpilot.app.update.UpdateUi
+import com.soundpilot.app.update.UpdateViewModel
 
 object Routes {
     const val LIBRARY = "library"
@@ -86,7 +89,7 @@ private fun NavHostController.navigateToTab(route: String) {
 }
 
 @Composable
-fun SoundPilotApp(playbackVm: PlaybackViewModel) {
+fun SoundPilotApp(playbackVm: PlaybackViewModel, updateVm: UpdateViewModel) {
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
@@ -106,6 +109,13 @@ fun SoundPilotApp(playbackVm: PlaybackViewModel) {
     LaunchedEffect(Unit) {
         playbackVm.errors.collect { message -> snackbarHostState.showSnackbar(message) }
     }
+    // پیام‌های بروزرسانی (اجازه نصب و…)
+    LaunchedEffect(Unit) {
+        updateVm.events.collect { message -> snackbarHostState.showSnackbar(message) }
+    }
+
+    val updateState by updateVm.state.collectAsStateWithLifecycle()
+    val updateBannerDismissed by updateVm.bannerDismissed.collectAsStateWithLifecycle()
 
     val showChrome = currentRoute in setOf(Routes.LIBRARY, Routes.EQUALIZER, Routes.SETTINGS)
     val showMiniPlayer = showChrome && hasCurrent
@@ -113,12 +123,29 @@ fun SoundPilotApp(playbackVm: PlaybackViewModel) {
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
-            // بنر وضعیت اتصال به موتور پخش — کاربر هرگز «بدون واکنش» نمی‌ماند
-            AnimatedVisibility(visible = showChrome && connectionState != PlaybackViewModel.ConnectionState.READY) {
-                ConnectionBanner(
-                    failed = connectionState == PlaybackViewModel.ConnectionState.FAILED,
-                    onRetry = playbackVm::retryConnection,
-                )
+            Column {
+                // بنر وضعیت اتصال به موتور پخش — کاربر هرگز «بدون واکنش» نمی‌ماند
+                AnimatedVisibility(visible = showChrome && connectionState != PlaybackViewModel.ConnectionState.READY) {
+                    ConnectionBanner(
+                        failed = connectionState == PlaybackViewModel.ConnectionState.FAILED,
+                        onRetry = playbackVm::retryConnection,
+                    )
+                }
+                // بنر نسخه جدید — فقط وقتی بررسی خودکار نسخه جدیدی پیدا کرده باشد
+                AnimatedVisibility(
+                    visible = showChrome &&
+                        !updateBannerDismissed &&
+                        updateState is UpdateUi.Available,
+                ) {
+                    val available = updateState as? UpdateUi.Available
+                    if (available != null) {
+                        UpdateAvailableBanner(
+                            version = available.info.version,
+                            onOpen = { navController.navigateToTab(Routes.SETTINGS) },
+                            onDismiss = updateVm::dismissBanner,
+                        )
+                    }
+                }
             }
         },
         bottomBar = {
@@ -190,6 +217,7 @@ fun SoundPilotApp(playbackVm: PlaybackViewModel) {
             composable(Routes.SETTINGS) {
                 SettingsScreen(
                     playbackVm = playbackVm,
+                    updateVm = updateVm,
                     onOpenPrivacy = { navController.navigate(Routes.PRIVACY) },
                 )
             }
@@ -280,6 +308,48 @@ private fun ConnectionBanner(
                 TextButton(onClick = onRetry) {
                     Text("تلاش مجدد")
                 }
+            }
+        }
+    }
+}
+
+/** بنر «نسخه جدید منتشر شد» — ظاهر ظریف کهربایی؛ لمس → تنظیمات، ردکردن → پایان این اجرا */
+@Composable
+private fun UpdateAvailableBanner(
+    version: String,
+    onOpen: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    Surface(
+        color = SpColors.Amber.copy(alpha = 0.14f),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+        ) {
+            Icon(
+                Icons.Rounded.SystemUpdateAlt,
+                contentDescription = null,
+                tint = SpColors.Amber,
+                modifier = Modifier.size(18.dp),
+            )
+            Text(
+                text = "نسخه جدید ${com.soundpilot.app.util.PersianText.toPersianDigits(version)} منتشر شد",
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(horizontal = 10.dp),
+            )
+            TextButton(onClick = onOpen) {
+                Text("بروزرسانی", color = SpColors.Amber)
+            }
+            TextButton(onClick = onDismiss) {
+                Text(
+                    "رد کردن",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
     }

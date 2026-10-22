@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -30,6 +31,8 @@ import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.FavoriteBorder
+import androidx.compose.material.icons.rounded.GraphicEq
+import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.LibraryMusic
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.Refresh
@@ -44,6 +47,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
@@ -211,6 +215,8 @@ fun LibraryScreen(
                             isPlaying = isPlaying,
                             playbackVm = playbackVm,
                             showNoResults = ui.query.isNotBlank() && ui.songs.isEmpty(),
+                            recentSongs = ui.recentSongs,
+                            showRecent = ui.query.isBlank(),
                         )
                         LibraryTab.ALBUMS -> AlbumsGrid(
                             albums = ui.albums,
@@ -255,6 +261,8 @@ private fun SongsList(
     isPlaying: Boolean,
     playbackVm: PlaybackViewModel,
     showNoResults: Boolean,
+    recentSongs: List<Song> = emptyList(),
+    showRecent: Boolean = false,
 ) {
     if (showNoResults) {
         EmptyState(
@@ -268,6 +276,15 @@ private fun SongsList(
         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
+        if (showRecent && recentSongs.isNotEmpty()) {
+            item(key = "recent") {
+                RecentSection(
+                    songs = recentSongs,
+                    currentSongId = currentSongId,
+                    onPlay = { index -> playbackVm.play(recentSongs, index) },
+                )
+            }
+        }
         itemsIndexed(songs, key = { _, song -> song.id }) { index, song ->
             SongRow(
                 song = song,
@@ -422,4 +439,86 @@ private fun sortLabel(mode: SortMode): String = when (mode) {
     SortMode.ALBUM -> "آلبوم"
     SortMode.DURATION -> "مدت"
     SortMode.RECENT -> "جدیدترین"
+}
+
+/** ردیف افقی «پخش‌های اخیر» — بر اساس آمار واقعی پخش روی خود دستگاه */
+@Composable
+private fun RecentSection(
+    songs: List<Song>,
+    currentSongId: Long?,
+    onPlay: (Int) -> Unit,
+) {
+    Column(Modifier.padding(vertical = 8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                Icons.Rounded.History,
+                contentDescription = null,
+                tint = SpColors.Amber,
+                modifier = Modifier.size(18.dp),
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = "پخش‌های اخیر",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+        Spacer(Modifier.height(8.dp))
+        LazyRow(
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            itemsIndexed(songs, key = { _, song -> "recent-${song.id}" }) { index, song ->
+                Column(
+                    modifier = Modifier
+                        .width(104.dp)
+                        .clip(MaterialTheme.shapes.small)
+                        .clickable { onPlay(index) }
+                        .padding(4.dp),
+                ) {
+                    Box {
+                        SongArtworkFill(
+                            albumId = song.albumId,
+                            songId = song.id,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .aspectRatio(1f),
+                        )
+                        if (song.id == currentSongId) {
+                            Surface(
+                                color = SpColors.Amber,
+                                shape = CircleShape,
+                                modifier = Modifier
+                                    .align(Alignment.BottomEnd)
+                                    .padding(6.dp),
+                            ) {
+                                Icon(
+                                    Icons.Rounded.GraphicEq,
+                                    contentDescription = "در حال پخش",
+                                    tint = androidx.compose.ui.graphics.Color.Black,
+                                    modifier = Modifier
+                                        .padding(4.dp)
+                                        .size(12.dp),
+                                )
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        text = song.title,
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text = song.artist,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+        }
+    }
 }

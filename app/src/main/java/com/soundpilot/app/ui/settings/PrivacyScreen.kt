@@ -15,6 +15,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Block
+import androidx.compose.material.icons.rounded.CloudDownload
 import androidx.compose.material.icons.rounded.EnhancedEncryption
 import androidx.compose.material.icons.rounded.FolderZip
 import androidx.compose.material.icons.rounded.MusicNote
@@ -65,8 +66,16 @@ fun PrivacyScreen(onBack: () -> Unit) {
             icon = Icons.Rounded.Block,
             title = "جمع‌آوری داده: صفر",
             body = "SoundPilot هیچ داده‌ای جمع‌آوری، ذخیره‌سازی ابری یا ارسال نمی‌کند. " +
-                "هیچ SDK ردیابی، تبلیغات یا آنالیتیکسی در برنامه وجود ندارد و برنامه " +
-                "هیچ مجوز دسترسی به اینترنت ندارد — یعنی از نظر فنی هم امکان ارسال داده وجود ندارد.",
+                "هیچ SDK ردیابی، تبلیغات یا آنالیتیکسی در برنامه وجود ندارد.",
+        )
+        Spacer(Modifier.height(12.dp))
+        PrivacyCard(
+            icon = Icons.Rounded.CloudDownload,
+            title = "تنها ارتباط شبکه‌ای: بروزرسانی",
+            body = "تنها استفاده از اینترنت، بررسی نسخه جدید از رسمی مخزن گیت‌هاب است. " +
+                "در این درخواست هیچ داده‌ای از شما ارسال نمی‌شود (فقط یک درخواست ساده مثل بازکردن یک صفحه وب). " +
+                "بررسی خودکار هر ۲۴ ساعت یک‌بار انجام می‌شود و می‌توانید آن را در تنظیمات خاموش کنید؛ " +
+                "دانلود و نصب همیشه فقط با فرمان صریح شما انجام می‌شود.",
         )
         Spacer(Modifier.height(12.dp))
         PrivacyCard(
@@ -94,7 +103,7 @@ fun PrivacyScreen(onBack: () -> Unit) {
         PrivacyCard(
             icon = Icons.Rounded.FolderZip,
             title = "ذخیره‌سازی محلی",
-            body = "علاقه‌مندی‌ها، تنظیمات و آخرین وضعیت پخش فقط در حافظه خود دستگاه (DataStore) " +
+            body = "علاقه‌مندی‌ها، آمار پخش، تنظیمات و آخرین وضعیت پخش فقط در حافظه خود دستگاه (DataStore) " +
                 "ذخیره می‌شود. پشتیبان‌گیری خودکار به سرویس‌های ابری اندروید غیرفعال است تا " +
                 "هیچ داده‌ای بدون اطلاع شما جابه‌جا نشود.",
         )

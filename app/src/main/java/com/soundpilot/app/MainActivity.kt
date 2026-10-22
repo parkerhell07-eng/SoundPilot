@@ -16,6 +16,7 @@ import com.soundpilot.app.ui.navigation.SoundPilotApp
 import com.soundpilot.app.ui.permission.PermissionGate
 import com.soundpilot.app.ui.player.PlaybackViewModel
 import com.soundpilot.app.ui.theme.SoundPilotTheme
+import com.soundpilot.app.update.UpdateViewModel
 
 class MainActivity : ComponentActivity() {
 
@@ -51,7 +52,8 @@ class MainActivity : ComponentActivity() {
             SoundPilotTheme(themeMode) {
                 PermissionGate {
                     val playbackVm: PlaybackViewModel = viewModel()
-                    SoundPilotApp(playbackVm = playbackVm)
+                    val updateVm: UpdateViewModel = viewModel()
+                    SoundPilotApp(playbackVm = playbackVm, updateVm = updateVm)
                 }
             }
         }

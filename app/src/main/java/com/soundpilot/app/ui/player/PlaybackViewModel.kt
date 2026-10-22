@@ -162,6 +162,9 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
     /** درخواست پخش که هنگام اتصال دریافت شده و پس از اتصال اجرا می‌شود */
     private var pendingPlay: Pair<List<Song>, Int>? = null
 
+    /** بعد از بازیابی صف، تا این لحظه آمار پخش ثبت نشود (گذار بازیابی شمرده نمی‌شود) */
+    private var suppressPlayStatsUntil = 0L
+
     private val playerListener = object : Player.Listener {
         override fun onEvents(player: Player, events: Player.Events) {
             snapshot(player)
@@ -178,6 +181,13 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
 
         override fun onMediaItemTransition(mediaItem: androidx.media3.common.MediaItem?, reason: Int) {
             scheduleSaveLastPlayed()
+            // ثبت آمار پخش برای «پخش‌های اخیر» — بازیابی صف شمرده نمی‌شود
+            val songId = mediaItem?.mediaId?.toLongOrNull()
+            if (songId != null && songId > 0 &&
+                android.os.SystemClock.elapsedRealtime() >= suppressPlayStatsUntil
+            ) {
+                appScope.launch { settings.recordPlay(songId) }
+            }
             // تور ایمنی: در حالت «پایان همین آهنگ» اگر گذار به آهنگ بعدی انجام شد، فوراً پاز کن
             if (sleepTimer.state.value.mode == SleepTimer.Mode.END_OF_TRACK) {
                 _controller.value?.pause()
@@ -541,6 +551,8 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
         c.repeatMode = last.repeatMode
         c.shuffleModeEnabled = last.shuffle
         c.prepare()
+        // بازیابی صف، یک «پخش» محسوب نمی‌شود
+        suppressPlayStatsUntil = android.os.SystemClock.elapsedRealtime() + 4_000
         // عمداً play() نمی‌زنیم؛ کاربر خودش ادامه می‌دهد
     }
 

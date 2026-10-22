@@ -4,8 +4,11 @@ import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.soundpilot.app.domain.PlayStatEntry
+import com.soundpilot.app.domain.PlayStatsOps
 import com.soundpilot.app.domain.model.SortMode
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
@@ -73,6 +76,9 @@ class SettingsRepository(private val context: Context) {
         val PLAYBACK_SPEED = stringPreferencesKey("playback_speed")
         val EQ_AUTO_SWITCH = booleanPreferencesKey("eq_auto_switch")
         val EQ_DEVICE_PROFILES = stringPreferencesKey("eq_device_profiles")
+        val PLAY_STATS = stringPreferencesKey("play_stats")
+        val UPDATE_AUTO_CHECK = booleanPreferencesKey("update_auto_check")
+        val UPDATE_LAST_CHECK = longPreferencesKey("update_last_check_at")
     }
 
     private inline fun <reified T> decode(raw: String?, default: T): T =
@@ -175,6 +181,47 @@ class SettingsRepository(private val context: Context) {
             prefs[Keys.FAVORITES] = json.encodeToString(current.toList())
         }
         return added
+    }
+
+    // ---------- آمار پخش (پخش‌های اخیر) ----------
+
+    val playStats: Flow<Map<Long, PlayStatEntry>> =
+        context.soundPilotDataStore.data
+            .catch { emit(emptyPreferences()) }
+            .map { PlayStatsOps.decode(it[Keys.PLAY_STATS]) }
+
+    /** ثبت یک شروع پخش — شمارش +۱ و به‌روزرسانی زمان آخرین پخش */
+    suspend fun recordPlay(songId: Long) {
+        if (songId <= 0) return
+        context.soundPilotDataStore.edit { prefs ->
+            val current = PlayStatsOps.decode(prefs[Keys.PLAY_STATS])
+            prefs[Keys.PLAY_STATS] = PlayStatsOps.encode(
+                PlayStatsOps.bump(current, songId, System.currentTimeMillis()),
+            )
+        }
+    }
+
+    // ---------- بروزرسانی درون‌برنامه‌ای ----------
+
+    /** بررسی خودکار نسخه جدید از گیت‌هاب — پیش‌فرض روشن و قابل خاموش‌کردن */
+    val updateAutoCheck: Flow<Boolean> =
+        context.soundPilotDataStore.data
+            .catch { emit(emptyPreferences()) }
+            .map { it[Keys.UPDATE_AUTO_CHECK] ?: true }
+
+    suspend fun setUpdateAutoCheck(value: Boolean) {
+        context.soundPilotDataStore.edit { prefs -> prefs[Keys.UPDATE_AUTO_CHECK] = value }
+    }
+
+    val lastUpdateCheckAt: Flow<Long> =
+        context.soundPilotDataStore.data
+            .catch { emit(emptyPreferences()) }
+            .map { it[Keys.UPDATE_LAST_CHECK] ?: 0L }
+
+    suspend fun markUpdateCheckedAt() {
+        context.soundPilotDataStore.edit { prefs ->
+            prefs[Keys.UPDATE_LAST_CHECK] = System.currentTimeMillis()
+        }
     }
 
     // ---------- ترجیحات برنامه ----------
