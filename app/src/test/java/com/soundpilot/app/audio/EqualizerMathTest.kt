@@ -80,4 +80,40 @@ class EqualizerMathTest {
             assertTrue(preset.label.isNotBlank())
         }
     }
+
+    // ───────────────── interpolateGains — نمودار زنده ─────────────────
+
+    private val centers5 = listOf(60, 230, 960, 3600, 12_000)
+    private val gains5 = listOf(4f, 2f, 0f, -2f, 3f)
+
+    @Test
+    fun `interpolateGains دقیقا روی مراکز باندها مقدار خود باند را می‌دهد`() {
+        centers5.forEachIndexed { index, center ->
+            val g = EqualizerMath.interpolateGains(centers5, gains5, center.toFloat())
+            assertEquals(gains5[index], g, 0.001f)
+        }
+    }
+
+    @Test
+    fun `interpolateGains بین دو باند میانی درون‌یابی می‌کند`() {
+        // میانگین لگاریتمی ۲۳۰ و ۹۶۰ حدود ۴۶۹ هرتز است → وسط ۲ و ۰ یعنی ۱
+        val g = EqualizerMath.interpolateGains(centers5, gains5, 469f)
+        assertEquals(1f, g, 0.15f)
+        // منحنی در ناحیه میانی باید بین سطوح دو باند مجاور باشد
+        val mid = EqualizerMath.interpolateGains(centers5, gains5, 1_800f)
+        assertTrue("بین ۰ و -۲ بود انتظار می‌رود: $mid", mid in -2f..0f)
+    }
+
+    @Test
+    fun `interpolateGains بیرون محدوده لبه‌ها را حفظ می‌کند`() {
+        assertEquals(4f, EqualizerMath.interpolateGains(centers5, gains5, 20f), 0.001f)
+        assertEquals(3f, EqualizerMath.interpolateGains(centers5, gains5, 20_000f), 0.001f)
+    }
+
+    @Test
+    fun `interpolateGains برای ورودی خالی یا تک‌باند امن است`() {
+        assertEquals(0f, EqualizerMath.interpolateGains(emptyList(), emptyList(), 1000f), 0.001f)
+        assertEquals(2.5f, EqualizerMath.interpolateGains(listOf(1000), listOf(2.5f), 1000f), 0.001f)
+        assertEquals(2.5f, EqualizerMath.interpolateGains(listOf(1000), listOf(2.5f), 55f), 0.001f)
+    }
 }

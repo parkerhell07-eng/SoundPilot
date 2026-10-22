@@ -51,6 +51,30 @@ object EqualizerMath {
             .coerceIn(minDb, minOf(maxDb, MAX_PRESET_BOOST_DB))
     }
 
+    /**
+     * درون‌یابی خطی سطوح واقعی باندها در مقیاس لگاریتمی فرکانس — برای رسم
+     * «نمودار زنده» اکولایزر که دقیقاً همان چیزی است که کاربر با فیدرها ساخته.
+     * فراتر از اولین/آخرین باند، سطح همان باند لبه حفظ می‌شود.
+     */
+    fun interpolateGains(centersHz: List<Int>, gainsDb: List<Float>, freqHz: Float): Float {
+        val n = minOf(centersHz.size, gainsDb.size)
+        if (n == 0) return 0f
+        if (n == 1) return gainsDb[0]
+        val x = ln(freqHz.coerceAtLeast(1f).toDouble())
+        val xs = List(n) { ln(centersHz[it].coerceAtLeast(1).toDouble()) }
+        if (x <= xs.first()) return gainsDb[0]
+        if (x >= xs[n - 1]) return gainsDb[n - 1]
+        for (i in 0 until n - 1) {
+            if (x >= xs[i] && x <= xs[i + 1]) {
+                val span = xs[i + 1] - xs[i]
+                if (span <= 0.0) return gainsDb[i + 1]
+                val t = ((x - xs[i]) / span).toFloat()
+                return gainsDb[i] + t * (gainsDb[i + 1] - gainsDb[i])
+            }
+        }
+        return 0f
+    }
+
     /** بازه مجاز اسلایدر کاربر — سقف‌گذاری‌شده برای جلوگیری از تقویت افراطی */
     fun uiRange(minDb: Float, maxDb: Float): ClosedFloatingPointRange<Float> {
         val bottom = maxOf(minDb, -MAX_USER_BOOST_DB)

@@ -14,6 +14,8 @@ import androidx.media3.common.AuxEffectInfo
 import com.soundpilot.app.data.EqualizerSettings
 import com.soundpilot.app.data.SettingsRepository
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -21,15 +23,25 @@ import kotlinx.coroutines.launch
 // استفاده اختیاری و ایمن است و نبودش هیچ‌گاه باعث کرش نمی‌شود.
 
 /**
- * کنترل‌کننده افکت‌های صوتی واقعی اندروید، متصل به نشست صوتی ExoPlayer.
+ * موتور حرفه‌ای افکت‌های صوتی واقعی اندروید، متصل به نشست صوتی پایدار برنامه.
+ *
+ * تفاوت با نسخه‌های قبل (ریشه رفع باگ «سازگار نیست» روی دستگاه واقعی):
+ * - نشست صوتی توسط خود برنامه ساخته و روی پلیر ست می‌شود (توسط PlaybackService)
+ *   و با تغییر خروجی (بلوتوث/هدفون) عوض نمی‌شود؛ افکت‌ها وصل می‌مانند.
+ * - اگر ایجاد افکت در لحظه‌ای شکست بخورد (مثلاً بلافاصله بعد از وصل‌شدن ضبط
+ *   خودرو که سیستم صوتی سامسونگ هنوز مسیر را جا نینداخته)، موتور با
+ *   عقب‌نشینی زمانی (۰٫۵ تا ۸ ثانیه) تا ۵ بار خودش دوباره تلاش می‌کند.
+ * - با شروع پخش و با تغییر خروجی صوتی هم دوباره تلاش می‌شود؛ پس دیگر هیچ‌گاه
+ *   وضعیت «سازگار نیست» دائمی به کاربر نشان داده نمی‌شود.
+ * - وضعیت دقیق موتور (Preparing/Ready/Unavailable) برای UI منتشر می‌شود تا
+ *   پیام‌ها صادقانه و همراه دکمه «تلاش مجدد» باشند.
  *
  * - قابلیت‌های دستگاه (تعداد باند، بازه فرکانسی، BassBoost/Virtualizer/Loudness/Reverb)
  *   در زمان اتصال تشخیص داده می‌شود؛ نبود هیچ‌یک باعث کرش نمی‌شود.
  * - تنظیمات از DataStore بازیابی و با باندهای واقعی دستگاه تطبیق داده می‌شود.
- * - «حافظه خروجی»: با تغییر خروجی (بلندگو/هدفون/بلوتوث ماشین) در صورت فعال‌بودن
- *   تعویض خودکار، آخرین پریست ذخیره‌شده همان خروجی اعمال می‌شود.
+ * - «حافظه خروجی»: با تغییر خروجی در صورت فعال‌بودن تعویض خودکار، آخرین پریست
+ *   ذخیره‌شده همان خروجی اعمال می‌شود.
  * - طنین (Reverb) به‌صورت افکت کمکی به AudioTrack پلیر وصل می‌شود.
- * - منابع صوتی هنگام تغییر نشست یا نابودی سرویس به‌درستی آزاد می‌شوند.
  */
 @Suppress("DEPRECATION")
 class AudioEffectsController(
@@ -45,6 +57,15 @@ class AudioEffectsController(
     private var reverb: PresetReverb? = null
     private var currentSessionId: Int = 0
     private var capabilities: EqualizerCapabilities = EqualizerCapabilities.UNSUPPORTED
+
+    /** شماره تلاش جاری در توالی اتصال (از ۱) */
+    private var attempt = 1
+
+    /** آخرین شکست ثبت‌شده — برای پیام دقیق کاربر */
+    private var lastFailure: EffectFailure = EffectFailure.GENERIC
+
+    /** توالی اتصال جاری؛ با شروع توالی جدید لغو می‌شود */
+    private var engineJob: Job? = null
 
     /**
      * مسیر اتصال افکت کمکی (طنین) به AudioTrack پلیر.
@@ -76,16 +97,76 @@ class AudioEffectsController(
         }.onFailure { Log.w(TAG, "ثبت AudioDeviceCallback ناموفق بود", it) }
     }
 
+    // ───────────────────────── توالی اتصال موتور ─────────────────────────
+
     /** اتصال/اتصال مجدد افکت‌ها به شناسه نشست صوتی پلیر */
     fun attach(audioSessionId: Int) {
         if (audioSessionId <= 0) return
-        if (audioSessionId == currentSessionId && equalizer != null) return
-        releaseEffects()
-        currentSessionId = audioSessionId
+        if (audioSessionId == currentSessionId && capabilities.supported) return
+        beginAttachSequence(audioSessionId)
+    }
+
+    /** تلاش مجدد با فرمان کاربر (دکمه «تلاش مجدد» در UI) */
+    fun retryFromUser() {
+        val sessionId = currentSessionId
+        if (sessionId <= 0) return
+        beginAttachSequence(sessionId)
+    }
+
+    /** با شروع واقعی پخش اگر افکت‌ها هنوز وصل نیستند، دوباره تلاش کن */
+    fun onPlaybackStarted() {
+        if (capabilities.supported) return
+        val sessionId = currentSessionId
+        if (sessionId <= 0) return
+        scope.launch {
+            // فرصت کوتاه برای جاافتادن مسیر صوتی روی دستگاه‌های کندتر
+            delay(EffectRetryPolicy.SETTLE_DELAY_MS)
+            beginAttachSequence(sessionId)
+        }
+    }
+
+    /** شروع یک توالی کامل اتصال: تلاش اول + تلاش‌های مجدد خودکار با backoff */
+    private fun beginAttachSequence(sessionId: Int) {
+        engineJob?.cancel()
+        engineJob = scope.launch {
+            runAttachSequence(sessionId)
+        }
+    }
+
+    private suspend fun runAttachSequence(sessionId: Int) {
+        currentSessionId = sessionId
+        attempt = 1
+        AudioEffectsHub.publishStatus(EffectsStatus.Preparing(attempt))
+        if (tryAttachEffects()) {
+            onEffectsReady()
+            return
+        }
+        // تلاش‌های مجدد خودکار — راه‌حل ریشه‌ای «سازگار نیست» موقت
+        while (EffectRetryPolicy.shouldRetry(attempt)) {
+            delay(EffectRetryPolicy.delayBeforeAttempt(attempt))
+            attempt++
+            Log.i(TAG, "تلاش مجدد اتصال افکت‌ها (تلاش $attempt از ${EffectRetryPolicy.MAX_ATTEMPTS})")
+            AudioEffectsHub.publishStatus(EffectsStatus.Preparing(attempt))
+            if (tryAttachEffects()) {
+                onEffectsReady()
+                return
+            }
+        }
+        Log.w(TAG, "اتصال افکت‌ها پس از ${EffectRetryPolicy.MAX_ATTEMPTS} تلاش ناموفق ماند")
+        AudioEffectsHub.publishStatus(
+            EffectsStatus.Unavailable(EffectFailureClassifier.userMessage(lastFailure)),
+        )
+    }
+
+    /** یک تلاش کامل برای ساختن همه افکت‌ها روی نشست جاری — true یعنی موفق */
+    private fun tryAttachEffects(): Boolean {
+        val sessionId = currentSessionId
+        if (sessionId <= 0) return false
+        releaseEffectsQuiet()
 
         var detected = EqualizerCapabilities.UNSUPPORTED
         try {
-            val eq = Equalizer(EFFECT_PRIORITY, audioSessionId)
+            val eq = Equalizer(EFFECT_PRIORITY, sessionId)
             equalizer = eq
             val bandCount = eq.numberOfBands.toInt()
             val levelRange = eq.bandLevelRange // [min, max] بر حسب میلی‌بِل
@@ -98,52 +179,59 @@ class AudioEffectsController(
                 maxDb = levelRange[1] / 100f,
             )
         } catch (e: Exception) {
-            Log.w(TAG, "Equalizer روی این نشست صوتی در دسترس نیست", e)
+            lastFailure = EffectFailureClassifier.classify(e)
+            Log.w(TAG, "Equalizer روی این نشست صوتی هنوز در دسترس نیست: ${e.message}")
             runCatching { equalizer?.release() }
             equalizer = null
         }
 
+        if (equalizer == null) {
+            // بدون اکولایزر، بقیه افکت‌ها بی‌معنا هستند؛ منابع جزئی را آزاد کن
+            releaseEffectsQuiet()
+            return false
+        }
+
         try {
-            bassBoost = BassBoost(EFFECT_PRIORITY, audioSessionId)
+            bassBoost = BassBoost(EFFECT_PRIORITY, sessionId)
         } catch (e: Exception) {
             Log.w(TAG, "BassBoost در دسترس نیست", e)
             bassBoost = null
         }
 
         try {
-            virtualizer = Virtualizer(EFFECT_PRIORITY, audioSessionId)
+            virtualizer = Virtualizer(EFFECT_PRIORITY, sessionId)
         } catch (e: Exception) {
             Log.w(TAG, "Virtualizer در دسترس نیست", e)
             virtualizer = null
         }
 
         try {
-            loudness = LoudnessEnhancer(audioSessionId)
+            loudness = LoudnessEnhancer(sessionId)
         } catch (e: Exception) {
             Log.w(TAG, "LoudnessEnhancer در دسترس نیست", e)
             loudness = null
         }
 
         try {
-            reverb = PresetReverb(EFFECT_PRIORITY, audioSessionId)
+            reverb = PresetReverb(EFFECT_PRIORITY, sessionId)
         } catch (e: Exception) {
             Log.w(TAG, "PresetReverb در دسترس نیست", e)
             runCatching { reverb?.release() }
             reverb = null
         }
 
-        capabilities = if (equalizer == null) {
-            EqualizerCapabilities.UNSUPPORTED
-        } else {
-            detected.copy(
-                bassSupported = bassBoost != null,
-                virtualizerSupported = virtualizer != null,
-                loudnessSupported = loudness != null,
-                reverbSupported = reverb != null && auxEffectSink != null,
-            )
-        }
-        AudioEffectsHub.publish(capabilities, sessionActive = true)
+        capabilities = detected.copy(
+            bassSupported = bassBoost != null,
+            virtualizerSupported = virtualizer != null,
+            loudnessSupported = loudness != null,
+            reverbSupported = reverb != null && auxEffectSink != null,
+        )
+        return true
+    }
 
+    /** اتصال موفق → انتشار وضعیت + بازیابی تنظیمات ذخیره‌شده */
+    private fun onEffectsReady() {
+        AudioEffectsHub.publishStatus(EffectsStatus.Ready(capabilities))
         // بازیابی تنظیمات ذخیره‌شده؛ اگر برای خروجی فعلی پروفایل مستقل ذخیره شده باشد
         // همان پروفایل مقدم است (قابلیت حافظه خروجی)
         scope.launch {
@@ -311,13 +399,19 @@ class AudioEffectsController(
         }
     }
 
-    /** آزادسازی افکت‌ها — بدون مختل‌کردن خود پخش */
+    /** آزادسازی کامل — بدون مختل‌کردن خود پخش */
     fun release() {
+        engineJob?.cancel()
         releaseEffects()
         runCatching { audioManager.unregisterAudioDeviceCallback(deviceCallback) }
     }
 
     private fun releaseEffects() {
+        releaseEffectsQuiet()
+        AudioEffectsHub.publishStatus(EffectsStatus.Idle)
+    }
+
+    private fun releaseEffectsQuiet() {
         runCatching { equalizer?.enabled = false }
         runCatching { equalizer?.release() }
         runCatching { bassBoost?.release() }
@@ -331,9 +425,7 @@ class AudioEffectsController(
         virtualizer = null
         loudness = null
         reverb = null
-        currentSessionId = 0
         capabilities = EqualizerCapabilities.UNSUPPORTED
-        AudioEffectsHub.publish(EqualizerCapabilities.UNSUPPORTED, sessionActive = false)
     }
 
     // ───────────────────────── حافظه خروجی ─────────────────────────
@@ -359,7 +451,19 @@ class AudioEffectsController(
         if (newCategory == currentCategory) return
         currentCategory = newCategory
         AudioEffectsHub.publishDeviceCategory(newCategory)
-        if (!capabilities.supported) return
+
+        if (!capabilities.supported) {
+            // خروجی عوض شد — سیستم صوتی برخی دستگاه‌ها افکت را فقط بعد از
+            // جاافتادن مسیر جدید می‌پذیرد؛ یک تلاش کامل جدید شروع کن
+            val sessionId = currentSessionId
+            if (sessionId > 0) {
+                scope.launch {
+                    delay(EffectRetryPolicy.SETTLE_DELAY_MS)
+                    beginAttachSequence(sessionId)
+                }
+            }
+            return
+        }
 
         scope.launch {
             val autoSwitch = settingsRepository.eqAutoSwitch.first()

@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.soundpilot.app.audio.AudioDeviceCategory
 import com.soundpilot.app.audio.AudioEffectsController
 import com.soundpilot.app.audio.AudioEffectsHub
+import com.soundpilot.app.audio.EffectsStatus
 import com.soundpilot.app.audio.EqState
 import com.soundpilot.app.audio.EqualizerMath
 import com.soundpilot.app.audio.EqualizerPresets
@@ -46,9 +47,21 @@ data class EqualizerUiState(
     val deviceCategory: AudioDeviceCategory = AudioDeviceCategory.SPEAKER,
     val autoSwitch: Boolean = true,
     val savedForCurrentDevice: Boolean = false,
+    // وضعیت دقیق موتور افکت‌ها
+    val status: EffectsStatus = EffectsStatus.Idle,
 ) {
     /** پریست جاری برای نمایش در کاروسل */
     val currentPreset: SoundPreset get() = SoundPresets.byId(profileId)
+
+    val engineReady: Boolean get() = status is EffectsStatus.Ready
+
+    val enginePreparing: Boolean get() = status is EffectsStatus.Preparing
+
+    /** در حال آماده‌سازی — شماره تلاش جاری (از ۱) */
+    val preparingAttempt: Int get() = (status as? EffectsStatus.Preparing)?.attempt ?: 1
+
+    /** پیام وضعیت ناموفق برای نمایش با دکمه تلاش مجدد */
+    val unavailableMessage: String? get() = (status as? EffectsStatus.Unavailable)?.message
 }
 
 /**
@@ -105,6 +118,9 @@ class EqualizerViewModel : ViewModel() {
             autoSwitch = autoSwitch,
             savedForCurrentDevice = profiles.containsKey(category.name),
         )
+    }.let { core ->
+        // تزریق وضعیت دقیق موتور بدون شکستن ترکیب ۵تایی بالا
+        combine(core, AudioEffectsHub.status) { state, status -> state.copy(status = status) }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), EqualizerUiState())
 
     fun setEnabled(value: Boolean) = publishAndPersist { it.copy(enabled = value) }
@@ -172,6 +188,11 @@ class EqualizerViewModel : ViewModel() {
 
     fun setAutoSwitch(value: Boolean) {
         viewModelScope.launch { settings.setEqAutoSwitch(value) }
+    }
+
+    /** تلاش مجدد اتصال افکت‌ها — دکمه در کارت وضعیت استودیو */
+    fun retryAttach() {
+        AudioEffectsHub.requestRetry()
     }
 
     fun reset() {

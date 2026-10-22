@@ -41,6 +41,23 @@ import androidx.compose.material.icons.rounded.Nightlight
 import androidx.compose.material.icons.rounded.Park
 import androidx.compose.material.icons.rounded.QuestionMark
 import androidx.compose.material.icons.rounded.RecordVoiceOver
+import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.Speaker
+import androidx.compose.material.icons.rounded.SurroundSound
+import androidx.compose.material.icons.rounded.Tv
+import androidx.compose.material.icons.rounded.Tune
+import androidx.compose.material.icons.rounded.Usb
+import androidx.compose.material.icons.rounded.WaterDrop
+import androidx.compose.material.icons.rounded.Waves
+import androidx.compose.material.icons.rounded.Whatshot
+import androidx.compose.material.icons.rounded.GraphicEq
+import androidx.compose.material.icons.rounded.Headphones
+import androidx.compose.material.icons.rounded.Mic
+import androidx.compose.material.icons.rounded.MusicNote
+import androidx.compose.material.icons.rounded.Nightlight
+import androidx.compose.material.icons.rounded.Park
+import androidx.compose.material.icons.rounded.QuestionMark
+import androidx.compose.material.icons.rounded.RecordVoiceOver
 import androidx.compose.material.icons.rounded.Speaker
 import androidx.compose.material.icons.rounded.SurroundSound
 import androidx.compose.material.icons.rounded.TheaterComedy
@@ -52,6 +69,7 @@ import androidx.compose.material.icons.rounded.Waves
 import androidx.compose.material.icons.rounded.Whatshot
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -84,6 +102,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.soundpilot.app.audio.AudioDeviceCategory
+import com.soundpilot.app.audio.EffectRetryPolicy
 import com.soundpilot.app.audio.EqualizerMath
 import com.soundpilot.app.audio.EqualizerPresets
 import com.soundpilot.app.audio.ReverbPreset
@@ -127,10 +146,20 @@ fun EffectStudioScreen() {
                 )
                 Text(
                     text = when {
-                        ui.supported && ui.sessionActive && ui.enabled -> "فعال — روی نشست پخش زنده"
-                        ui.supported && ui.sessionActive -> "متصل به پخش (خاموش)"
-                        ui.supported -> "پخش را شروع کنید تا فعال شود"
-                        else -> "در انتظار تشخیص قابلیت‌های دستگاه"
+                        ui.engineReady && ui.enabled -> "فعال — روی نشست پخش زنده"
+                        ui.engineReady -> "متصل به موتور صدا (خاموش)"
+                        ui.enginePreparing ->
+                            if (ui.preparingAttempt > 1) {
+                                "در حال آماده‌سازی… تلاش " +
+                                    PersianText.toPersianDigits(ui.preparingAttempt.toString()) +
+                                    " از " + PersianText.toPersianDigits(
+                                        EffectRetryPolicy.MAX_ATTEMPTS.toString(),
+                                    )
+                            } else {
+                                "در حال آماده‌سازی موتور صدا…"
+                            }
+                        ui.unavailableMessage != null -> "اتصال افکت‌ها نیاز به تلاش مجدد دارد"
+                        else -> "در انتظار راه‌اندازی سرویس پخش"
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -139,7 +168,7 @@ fun EffectStudioScreen() {
             Switch(
                 checked = ui.enabled,
                 onCheckedChange = vm::setEnabled,
-                enabled = ui.sessionActive,
+                enabled = ui.engineReady,
                 colors = SwitchDefaults.colors(
                     checkedTrackColor = SpColors.Amber,
                     checkedThumbColor = Color(0xFF221600),
@@ -225,23 +254,33 @@ fun EffectStudioScreen() {
         Spacer(Modifier.height(14.dp))
 
         when {
-            !ui.sessionActive -> {
-                InfoCard(
-                    title = "برای فعال‌سازی افکت‌ها، یک آهنگ پخش کنید",
-                    body = "باندهای واقعی دستگاه پس از شروع پخش شناسایی می‌شوند و پریست انتخابی شما " +
-                        "به‌طور خودکار اعمال و ذخیره می‌شود.",
+            ui.enginePreparing -> {
+                EngineStatusCard(
+                    title = "در حال اتصال به موتور صدا…",
+                    body = "افکت‌ها به‌صورت خودکار تا چند بار دوباره تلاش می‌کنند وصل شوند " +
+                        "— این رفتار عادی است و معمولاً چند ثانیه بیشتر طول نمی‌کشد. " +
+                        "با شروع پخش هم بلافاصله دوباره تلاش می‌شود.",
+                    attempt = ui.preparingAttempt,
+                    preparing = true,
+                    onRetry = vm::retryAttach,
                 )
             }
-            !ui.supported -> {
-                InfoCard(
-                    title = "موتور صوتی این دستگاه از افکت پشتیبانی نمی‌کند",
-                    body = "پخش بدون تغییر و بدون خطا ادامه خواهد داشت؛ سایر امکانات برنامه فعال است.",
+            ui.unavailableMessage != null -> {
+                EngineStatusCard(
+                    title = "اتصال افکت‌ها برقرار نشد",
+                    body = ui.unavailableMessage +
+                        " پخش بدون هیچ تغییری و بدون خطا ادامه دارد و با تغییر خروجی " +
+                        "(مثلاً وصل‌کردن هدفون) اتصال دوباره به‌طور خودکار تلاش می‌شود.",
+                    attempt = null,
+                    preparing = false,
+                    onRetry = vm::retryAttach,
                 )
             }
-            else -> {
-                // ───────────── نمودار زنده منحنی ─────────────
+            ui.engineReady -> {
+                // ───────────── نمودار زنده: سطوح واقعی باندها ─────────────
                 CurveGraph(
-                    curve = current.curve,
+                    centersHz = ui.centersHz,
+                    gainsDb = ui.gainsDb,
                     accent = SpColors.Amber,
                     enabled = ui.enabled,
                     modifier = Modifier
@@ -328,6 +367,16 @@ fun EffectStudioScreen() {
                         }
                     }
                 }
+            }
+
+            else -> {
+                // ───────────── در انتظار سرویس پخش ─────────────
+                InfoCard(
+                    title = "در انتظار راه‌اندازی سرویس پخش",
+                    body = "سرویس پخش در پس‌زمینه راه‌اندازی می‌شود و افکت‌ها بدون نیاز به کاری " +
+                        "از سمت شما وصل می‌شوند؛ اگر همین حالا آهنگی پخش کنید چند ثانیه‌ای " +
+                        "آماده خواهد شد.",
+                )
             }
         }
 
@@ -483,10 +532,15 @@ private fun presetIcon(presetId: String): ImageVector = when (presetId) {
 
 // ───────────────────────── نمودار منحنی ─────────────────────────
 
-/** نمایش زنده منحنی پریست روی مقیاس لگاریتمی فرکانس */
+/**
+ * نمودار زنده اکولایزر — سطوح واقعی باندها را با درون‌یابی لگاریتمی رسم می‌کند،
+ * پس با هر حرکت فیدر، منحنی همان لحظه به‌روز می‌شود (نه منحنی آرمانی پریست).
+ * شامل: پرکردن گرادیانی زیر منحنی + نقاط مرکز باند + شبکه محورها.
+ */
 @Composable
 private fun CurveGraph(
-    curve: List<Pair<Float, Float>>,
+    centersHz: List<Int>,
+    gainsDb: List<Float>,
     accent: Color,
     enabled: Boolean,
     modifier: Modifier = Modifier,
@@ -495,15 +549,17 @@ private fun CurveGraph(
     val gridColor = MaterialTheme.colorScheme.outlineVariant
     Canvas(
         modifier = modifier
-            .height(96.dp)
+            .height(110.dp)
             .clip(RoundedCornerShape(16.dp))
             .background(MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.55f)),
     ) {
         val minFreq = 20f
         val maxFreq = 20000f
-        val minDb = -6f
-        val maxDb = 6f
-        val pad = 10.dp.toPx()
+        // بازه عمودی هوشمند: همیشه حداقل ±۶ دسی‌بل دید؛ اگر باندها بیرون زدند گشادتر
+        val peak = maxOf(6f, (gainsDb.maxOrNull() ?: 0f) + 1.5f, -(gainsDb.minOrNull() ?: 0f) + 1.5f)
+        val minDb = -peak
+        val maxDb = peak
+        val pad = 12.dp.toPx()
 
         fun xOf(freq: Float): Float {
             val t = (ln(freq.coerceIn(minFreq, maxFreq).toDouble()) - ln(minFreq.toDouble())) /
@@ -533,22 +589,132 @@ private fun CurveGraph(
             )
         }
 
-        // منحنی
+        if (centersHz.isEmpty() || gainsDb.isEmpty()) return@Canvas
+
+        // منحنی از سطوح واقعی باندها
         val path = Path()
-        val samples = 64
+        val samples = 96
         for (i in 0..samples) {
             val t = i.toFloat() / samples
             val logF = ln(minFreq.toDouble()) + t * (ln(maxFreq.toDouble()) - ln(minFreq.toDouble()))
             val freq = kotlin.math.exp(logF).toFloat()
-            val y = yOf(EqualizerMath.sampleCurve(curve, freq))
+            val y = yOf(EqualizerMath.interpolateGains(centersHz, gainsDb, freq))
             val x = xOf(freq)
             if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
         }
+        // پرکردن ملایم زیر منحنی تا خط صفر
+        val fill = Path().apply {
+            addPath(path)
+            lineTo(xOf(maxFreq), yOf(0f))
+            lineTo(xOf(minFreq), yOf(0f))
+            close()
+        }
+        drawPath(
+            path = fill,
+            brush = Brush.verticalGradient(
+                colors = listOf(
+                    lineColor.copy(alpha = if (enabled) 0.28f else 0.10f),
+                    Color.Transparent,
+                ),
+                startY = pad,
+                endY = size.height - pad,
+            ),
+        )
         drawPath(
             path = path,
             color = lineColor,
             style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round),
         )
+        // نقاط مرکز باند — همان چیزی که فیدرها کنترل می‌کنند
+        centersHz.forEachIndexed { index, center ->
+            if (index < gainsDb.size) {
+                drawCircle(
+                    color = lineColor,
+                    radius = 4.dp.toPx(),
+                    center = Offset(xOf(center.toFloat()), yOf(gainsDb[index])),
+                )
+                drawCircle(
+                    color = Color(0xFF221600),
+                    radius = 1.6.dp.toPx(),
+                    center = Offset(xOf(center.toFloat()), yOf(gainsDb[index])),
+                )
+            }
+        }
+    }
+}
+
+// ───────────────────── کارت وضعیت موتور افکت ─────────────────────
+
+/**
+ * کارت وضعیت اتصال موتور صدا: «در حال آماده‌سازی» با انیمیشن و شمارش تلاش،
+ * یا «برقرار نشد» با پیام دقیق و دکمه تلاش مجدد — هرگز بن‌بست «سازگار نیست» نیست.
+ */
+@Composable
+private fun EngineStatusCard(
+    title: String,
+    body: String,
+    attempt: Int?,
+    preparing: Boolean,
+    onRetry: () -> Unit,
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.7f),
+        ),
+    ) {
+        Column(Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (preparing) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(26.dp),
+                        strokeWidth = 2.5.dp,
+                        color = SpColors.Amber,
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .size(26.dp)
+                            .clip(CircleShape)
+                            .background(SpColors.Amber.copy(alpha = 0.18f)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Refresh,
+                            contentDescription = null,
+                            tint = SpColors.Amber,
+                            modifier = Modifier.size(17.dp),
+                        )
+                    }
+                }
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(text = title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                    if (preparing && attempt != null && attempt > 1) {
+                        Text(
+                            text = "تلاش " + PersianText.toPersianDigits(attempt.toString()) +
+                                " از " + PersianText.toPersianDigits(EffectRetryPolicy.MAX_ATTEMPTS.toString()),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = SpColors.Amber,
+                        )
+                    }
+                }
+                TextButton(onClick = onRetry) {
+                    Icon(Icons.Rounded.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("تلاش مجدد")
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = body,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }
 

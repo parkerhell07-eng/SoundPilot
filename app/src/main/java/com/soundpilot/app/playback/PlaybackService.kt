@@ -1,7 +1,9 @@
 package com.soundpilot.app.playback
 
 import android.app.PendingIntent
+import android.content.Context
 import android.content.Intent
+import android.media.AudioManager
 import android.util.Log
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
@@ -29,7 +31,9 @@ import kotlin.math.abs
  *
  * - پخش پایدار در پس‌زمینه با اعلان رسانه و کنترل از صفحه قفل
  * - مدیریت خودکار فوکوس صوتی (پاز هنگام تماس/راهنمای ناوبری) و قطع هدفون (becoming noisy)
- * - اتصال افکت‌های صوتی به نشست صوتی واقعی پلیر
+ * - نشست صوتی پایدار متعلق به برنامه: افکت‌های صوتی به نشستی وصل می‌شوند که
+ *   خودِ برنامه با AudioManager ساخته و روی پلیر ست کرده است؛ با تغییر خروجی
+ *   (بلوتوث/هدفون) نشست عوض نمی‌شود و افکت‌ها وصل می‌مانند.
  * - ریکاوری خودکار از خطای پخش (پرش به آهنگ بعدی؛ توقف در صورت خرابی همه)
  */
 class PlaybackService : MediaSessionService() {
@@ -59,9 +63,26 @@ class PlaybackService : MediaSessionService() {
             .setWakeMode(C.WAKE_MODE_LOCAL)
             .build()
 
+        // نشست صوتی پایدار: افکت‌ها یک‌بار وصل می‌شوند و در تعویض خروجی زنده می‌مانند.
+        // این همان راهکاری است که پلیرهای حرفه‌ای استفاده می‌کنند.
+        val audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        val stableSessionId = runCatching { audioManager.generateAudioSessionId() }.getOrNull()
+        if (stableSessionId != null && stableSessionId > 0) {
+            runCatching { player.setAudioSessionId(stableSessionId) }
+                .onFailure { Log.w(TAG, "ست‌کردن نشست صوتی پایدار ناموفق بود", it) }
+        }
+
         player.addListener(object : Player.Listener {
             override fun onAudioSessionIdChanged(audioSessionId: Int) {
+                // با نشست پایدار فقط یک‌بار رخ می‌دهد؛ به‌عنوان تور ایمنی حفظ شده
                 effects?.attach(audioSessionId)
+            }
+
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                if (isPlaying) {
+                    // اگر اتصال افکت‌ها هنوز جا نیفتاده بود، با شروع پخش دوباره تلاش کن
+                    effects?.onPlaybackStarted()
+                }
             }
 
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
@@ -91,7 +112,7 @@ class PlaybackService : MediaSessionService() {
             .setSessionActivity(sessionActivity)
             .build()
 
-        // بازیابی وضعیت ذخیره‌شده افکت‌ها و اتصال به نشست فعلی (در صورت وجود)
+        // بازیابی وضعیت ذخیره‌شده افکت‌ها و اتصال به نشست پایدار (بدون نیاز به شروع پخش)
         serviceScope!!.launch {
             val saved = ServiceLocator.settingsRepository.equalizerSettings.first()
             AudioEffectsHub.setDesiredState(

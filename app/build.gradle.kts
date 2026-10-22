@@ -23,8 +23,8 @@ android {
         minSdk = 26
         // الزام Google Play برای اپ‌های جدید از ۳۱ اوت ۲۰۲۶: targetSdk 36
         targetSdk = 36
-        versionCode = 5
-        versionName = "1.4.0"
+        versionCode = 6
+        versionName = "1.5.0"
     }
 
     if (keystoreProperties.isNotEmpty()) {
